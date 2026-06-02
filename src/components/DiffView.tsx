@@ -3,6 +3,7 @@ import type { UnlistenFn } from "@tauri-apps/api/event";
 import type { DiffResult, DiffHunk, DiffChange, ChangeType } from "../types/diff";
 import { detectLanguage, highlightFile, type HighlightedLines } from "../lib/highlight";
 import { diffPaths as navDiffPaths } from "../lib/navStore";
+import { addHistoryEntry } from "../lib/historyStore";
 
 // ── 文本重建：从 hunks 中提取完整文件内容 ──
 
@@ -198,12 +199,30 @@ export function DiffView(props: DiffViewProps) {
       highlightDiffContent(r, leftPath(), rightPath());
       // 自动监视文件变更
       watch([leftPath(), rightPath()]);
+      // 写入历史记录
+      recordHistory(r);
     } catch (e) {
       console.error("Diff failed:", e);
       setError(String(e));
     } finally {
       setLoading(false);
     }
+  }
+
+  function recordHistory(r: DiffResult) {
+    const adds = r.hunks.flatMap(h => h.changes).filter(c => c.change_type === "Add").length;
+    const dels = r.hunks.flatMap(h => h.changes).filter(c => c.change_type === "Delete").length;
+    addHistoryEntry({
+      id: `diff_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      type: "diff",
+      label: `${leftPath().split(/[/\\]/).pop() ?? "?"} ↔ ${rightPath().split(/[/\\]/).pop() ?? "?"}`,
+      timestamp: Date.now(),
+      left_path: leftPath(),
+      right_path: rightPath(),
+      base_path: basePath() || undefined,
+      adds,
+      dels,
+    });
   }
 
   async function highlightDiffContent(r: DiffResult, leftP: string, rightP: string) {

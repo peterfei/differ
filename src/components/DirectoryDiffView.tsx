@@ -1,5 +1,6 @@
 import { createSignal, createMemo, Show, For } from "solid-js";
 import type { DirectoryDiffResult, DirectoryEntry, EntryStatus } from "../types/diff";
+import { addHistoryEntry } from "../lib/historyStore";
 
 interface Props {
   onOpenFileDiff: (leftPath: string, rightPath: string, basePath?: string) => void;
@@ -44,6 +45,16 @@ export function DirectoryDiffView(props: Props) {
         rightPath: rightDir(),
       });
       setResult(r);
+      // 写入历史记录
+      addHistoryEntry({
+        id: `dir_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        type: "directory",
+        label: `${leftDir().split(/[/\\]/).pop() ?? "?"} ↔ ${rightDir().split(/[/\\]/).pop() ?? "?"}`,
+        timestamp: Date.now(),
+        dirs: [leftDir(), rightDir()],
+        adds: r.added,
+        dels: r.removed,
+      });
       // Auto-expand all on result
       const all = new Set<string>();
       collectPaths(r.entries, all);

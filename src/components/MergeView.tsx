@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import type { MergeResult, MergeConflict } from '../types/merge';
 import { openFileDialog, saveFileDialog } from '../lib/dialog';
 import { mergePaths, setMergePaths } from '../lib/navStore';
+import { addHistoryEntry } from '../lib/historyStore';
 
 type ViewMode = 'source' | 'merged';
 
@@ -85,6 +86,17 @@ export function MergeView() {
       setUndoStack([]);
       setSelectedConflictIndex(0);
       setViewMode('merged');
+      // 写入历史记录
+      addHistoryEntry({
+        id: `merge_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        type: "merge",
+        label: `${leftPath().split(/[/\\]/).pop() ?? "?"} + ${rightPath().split(/[/\\]/).pop() ?? "?"}`,
+        timestamp: Date.now(),
+        left_path: leftPath(),
+        right_path: rightPath(),
+        base_path: basePath(),
+        conflicts: res.conflicts.length,
+      });
     } catch (e) {
       setError(String(e));
     } finally {

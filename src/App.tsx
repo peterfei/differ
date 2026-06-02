@@ -1,5 +1,7 @@
 import { createSignal, onMount } from 'solid-js';
 import { DiffView } from './components/DiffView';
+import { Dashboard } from './components/Dashboard';
+import { HistoryView } from './components/HistoryView';
 import { SettingsView } from './components/SettingsView';
 import { DirectoryDiffView } from './components/DirectoryDiffView';
 import { MergeView } from './components/MergeView';
@@ -68,7 +70,12 @@ function App() {
           </div>
         </header>
 
-        {currentView() === 'dashboard' && <Dashboard />}
+        {currentView() === 'dashboard' && <Dashboard onNavigate={(view) => {
+            if (view === 'diff') { setDiffMode('file'); setCurrentView('diff'); }
+            else if (view === 'directory') { setDiffMode('directory'); setCurrentView('diff'); }
+            else if (view === 'merge') setCurrentView('merge');
+            else if (view === 'history') setCurrentView('history');
+          }} />}
 
         {/* 保持两个 diff 视图常挂载，避免切换时状态丢失 */}
         <div class="flex-1 flex flex-col overflow-hidden" style={{ display: currentView() === 'diff' && diffMode() === 'file' ? 'flex' : 'none' }}>
@@ -79,7 +86,11 @@ function App() {
         </div>
 
         {currentView() === 'merge' && <MergeView />}
-        {currentView() === 'history' && <HistoryView />}
+        {currentView() === 'history' && <HistoryView onNavigate={(view) => {
+            if (view === 'diff') { setDiffMode('file'); setCurrentView('diff'); }
+            else if (view === 'directory') { setDiffMode('directory'); setCurrentView('diff'); }
+            else if (view === 'merge') setCurrentView('merge');
+          }} />}
         {currentView() === 'settings' && <SettingsView />}
       </main>
     </div>
@@ -109,14 +120,6 @@ function NavButton({ icon, label, active, onClick }: { icon: string; label: stri
       {icons[icon]}
     </button>
   );
-}
-
-// Placeholder views - implemented in separate files
-function Dashboard() {
-  return <div class="flex-1 flex items-center justify-center text-slate-500 text-sm">Dashboard — 即将实现</div>;
-}
-function HistoryView() {
-  return <div class="flex-1 flex items-center justify-center text-slate-500 text-sm">History — 即将实现</div>;
 }
 
 export default App;
