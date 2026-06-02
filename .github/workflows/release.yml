@@ -22,13 +22,10 @@ jobs:
         include:
           - os: macos-latest
             target: aarch64-apple-darwin
-            arch: arm64
           - os: macos-latest
             target: x86_64-apple-darwin
-            arch: x64
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            arch: x64
 
     runs-on: ${{ matrix.os }}
 
@@ -65,20 +62,17 @@ jobs:
             libsoup-3.0-dev \
             libjavascriptcoregtk-4.1-dev
 
-      # ── macOS 代码签名准备 ──
+      # ── macOS 代码签名（可选：无证书则跳过）──
       - name: Import Apple Developer certificate
-        if: matrix.os == 'macos-latest'
+        if: matrix.os == 'macos-latest' && env.APPLE_CERTIFICATE != ''
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           KEYCHAIN_PATH: ${{ runner.temp }}/differ-signing.keychain
         run: |
-          # 创建临时钥匙串
           security create-keychain -p "temp" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "temp" "$KEYCHAIN_PATH"
-
-          # 导入证书
           echo "$APPLE_CERTIFICATE" | base64 --decode > /tmp/apple-cert.p12
           security import /tmp/apple-cert.p12 \
             -k "$KEYCHAIN_PATH" \
@@ -86,8 +80,6 @@ jobs:
             -T /usr/bin/codesign \
             -T /usr/bin/productbuild \
             -T /usr/bin/productsign
-
-          # 添加到搜索路径
           security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
           security set-key-partition-list \
             -S apple-tool:,apple:,codesign: \
@@ -99,37 +91,30 @@ jobs:
       - name: Build frontend
         run: npm run build
 
-      # ── 构建 + 签名 + 公证 ──
+      # ── 构建：Tauri 自动处理签名（有 APPLE_SIGNING_IDENTITY 则签，否则跳过）──
       - name: Build Tauri app
         run: npx tauri build --target ${{ matrix.target }}
         env:
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY || '' }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID || '' }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY || '' }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER || '' }}
 
       - name: Clean up keychain (macOS)
-        if: matrix.os == 'macos-latest'
+        if: matrix.os == 'macos-latest' && env.APPLE_CERTIFICATE != ''
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
         run: |
           security delete-keychain "${{ runner.temp }}/differ-signing.keychain" || true
 
       # ── 上传构建产物 ──
-      - name: Upload bundle (macOS .dmg)
+      - name: Upload bundle (macOS)
         if: matrix.os == 'macos-latest'
         uses: actions/upload-artifact@v4
         with:
           name: differ-${{ matrix.target }}
           path: |
             src-tauri/target/release/bundle/dmg/*.dmg
-          if-no-files-found: error
-
-      - name: Upload bundle (macOS .app)
-        if: matrix.os == 'macos-latest'
-        uses: actions/upload-artifact@v4
-        with:
-          name: differ-${{ matrix.target }}-app
-          path: |
-            src-tauri/target/release/bundle/macos/*.app
           if-no-files-found: warn
 
       - name: Upload bundle (Linux)
@@ -145,6 +130,7 @@ jobs:
   # ── 创建 Release ──
   release:
     needs: [build]
+    if: always()
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -157,9 +143,6 @@ jobs:
         with:
           pattern: differ-*
           merge-multiple: true
-
-      - name: List artifacts
-        run: ls -lhR
 
       - name: Generate release notes
         run: |
