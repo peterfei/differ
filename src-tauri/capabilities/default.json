@@ -1,0 +1,13 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicorde/tauri/refs/heads/dev/crates/tauri-utils/schema.json",
+  "identifier": "default",
+  "description": "Capability for the main window",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:default",
+    "core:window:allow-close",
+    "core:window:allow-set-title",
+    "core:window:allow-set-size"
+  ]
+}

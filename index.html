@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Differ — Diff / Merge GUI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+            mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
+          },
+          colors: {
+            diff: {
+              add: { bg: '#0a2e1a', border: '#22c55e', text: '#bbf7d0' },
+              del: { bg: '#3b0f12', border: '#ef4444', text: '#fecaca' },
+              neutral: { bg: '#1e293b', border: '#475569', text: '#cbd5e1' },
+              wordAdd: '#166534',
+              wordDel: '#991b1b',
+            },
+          },
+          animation: {
+            'fade-in': 'fadeIn 0.2s ease-out',
+            'slide-up': 'slideUp 0.25s ease-out',
+            'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+          },
+          keyframes: {
+            fadeIn: { '0%': { opacity: '0' }, '100%': { opacity: '1' } },
+            slideUp: { '0%': { opacity: '0', transform: 'translateY(8px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    * { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+    body { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #475569; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    .glass-panel { background: rgba(30, 41, 59, 0.8); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+    .glass-panel-light { background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+    .line-numbers { user-select: none; }
+    .diff-line { transition: background-color 0.15s ease; }
+    .diff-line:hover { filter: brightness(1.15); }
+    .nav-item { position: relative; transition: all 0.15s ease; }
+    .nav-item::before { content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 3px; height: 0; border-radius: 0 3px 3px 0; background: #818cf8; transition: height 0.2s ease; }
+    .nav-item.active::before { height: 24px; }
+    .nav-item.active { background: rgba(99, 102, 241, 0.1); }
+    .glow-indigo { box-shadow: 0 0 20px rgba(99, 102, 241, 0.15); }
+    @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+    .skeleton { background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; }
+    .badge-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+  </style>
+</head>
+<body class="h-screen overflow-hidden bg-slate-950 text-slate-100 dark">
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+</html>
