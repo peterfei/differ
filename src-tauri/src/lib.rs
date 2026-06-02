@@ -13,6 +13,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::diff::diff_files,
             commands::diff::diff_text,
+            commands::diff::diff_files_syntax,
+            commands::diff::diff_text_syntax,
             commands::directory::diff_directories_command,
             commands::merge::merge_files,
             commands::merge::merge_text,

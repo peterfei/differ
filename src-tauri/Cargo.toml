@@ -22,6 +22,13 @@ rayon = "1"
 tauri-plugin-store = "2.4.3"
 notify = "8.2.0"
 
+# tree-sitter for syntax-aware diff
+tree-sitter = "0.24"
+tree-sitter-rust = "0.23"
+tree-sitter-javascript = "0.23"
+tree-sitter-typescript = "0.23"
+tree-sitter-python = "0.23"
+
 [dev-dependencies]
 insta = { version = "1", features = ["json"] }
 proptest = "1"

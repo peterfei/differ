@@ -1,4 +1,7 @@
-use crate::diff::{text_diff, DiffOptions, DiffResult};
+use crate::diff::{
+    syntax_diff::{detect_language, enhance_with_syntax, Language},
+    text_diff, DiffOptions, DiffResult,
+};
 
 #[tauri::command]
 pub async fn diff_files(
@@ -24,6 +27,48 @@ pub async fn diff_text(
 ) -> DiffResult {
     let opts = options.unwrap_or_default();
     text_diff(&left_text, &right_text, &opts)
+}
+
+/// Diff two files with syntax-aware hunk regrouping.
+/// Language is auto-detected from file extension.
+#[tauri::command]
+pub async fn diff_files_syntax(
+    left_path: String,
+    right_path: String,
+    options: Option<DiffOptions>,
+) -> Result<DiffResult, String> {
+    let opts = options.unwrap_or_default();
+    let left = tokio::fs::read_to_string(&left_path)
+        .await
+        .map_err(|e| format!("读取文件失败: {}", e))?;
+    let right = tokio::fs::read_to_string(&right_path)
+        .await
+        .map_err(|e| format!("读取文件失败: {}", e))?;
+
+    // Auto-detect language from the right file path (or left as fallback)
+    let lang = detect_language(&right_path)
+        .or_else(|| detect_language(&left_path));
+
+    let result = text_diff(&left, &right, &opts);
+    Ok(enhance_with_syntax(result, &left, &right, lang))
+}
+
+/// Diff two text strings with syntax-aware hunk regrouping.
+/// `language` is an optional language name (e.g. "Rust", "JavaScript", "Python").
+/// If omitted or unrecognized, falls back to line-level diff.
+#[tauri::command]
+pub async fn diff_text_syntax(
+    left_text: String,
+    right_text: String,
+    language: Option<String>,
+    options: Option<DiffOptions>,
+) -> DiffResult {
+    let opts = options.unwrap_or_default();
+
+    let lang = language.as_deref().and_then(|s| s.parse::<Language>().ok());
+
+    let result = text_diff(&left_text, &right_text, &opts);
+    enhance_with_syntax(result, &left_text, &right_text, lang)
 }
 
 #[cfg(test)]

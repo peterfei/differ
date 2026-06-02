@@ -32,6 +32,7 @@ export interface DiffHunk {
   new_start: number;
   new_lines: number;
   changes: DiffChange[];
+  syntax_context?: string;
 }
 
 export interface DiffResult {

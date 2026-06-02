@@ -41,6 +41,7 @@ export function DiffView(props: DiffViewProps) {
   const [error, setError] = createSignal<string | null>(null);
 
   const [fileChanged, setFileChanged] = createSignal(false);
+  const [useSyntax, setUseSyntax] = createSignal(false);
 
   let unlisten: UnlistenFn | undefined;
 
@@ -184,7 +185,8 @@ export function DiffView(props: DiffViewProps) {
     setLoading(true);
     try {
       const { invoke } = await import("@tauri-apps/api/core");
-      const r = await invoke<DiffResult>("diff_files", {
+      const cmd = useSyntax() ? "diff_files_syntax" : "diff_files";
+      const r = await invoke<DiffResult>(cmd, {
         leftPath: leftPath(),
         rightPath: rightPath(),
         options: { algorithm: algorithm(), context_lines: 3, ignore_whitespace: false, ignore_case: false },
@@ -319,6 +321,21 @@ export function DiffView(props: DiffViewProps) {
                   Patience
                 </button>
               </div>
+              {/* Syntax-aware toggle */}
+              <div class="flex items-center bg-slate-800/60 rounded-lg p-0.5 border border-slate-700/30">
+                <button
+                  class={`px-2 py-1 text-[10px] font-medium rounded-md transition-colors ${!useSyntax() ? "text-indigo-300 bg-indigo-500/15" : "text-slate-500 hover:text-slate-300"}`}
+                  onClick={() => { setUseSyntax(false); if (leftPath()) runDiff(); }}
+                >
+                  行级
+                </button>
+                <button
+                  class={`px-2 py-1 text-[10px] font-medium rounded-md transition-colors ${useSyntax() ? "text-indigo-300 bg-indigo-500/15" : "text-slate-500 hover:text-slate-300"}`}
+                  onClick={() => { setUseSyntax(true); if (leftPath()) runDiff(); }}
+                >
+                  语法
+                </button>
+              </div>
             </div>
           </Show>
         </div>
@@ -423,6 +440,7 @@ export function DiffView(props: DiffViewProps) {
             <span>Ctrl+G: 跳转</span>
             <span>Ctrl+D: 切换视图</span>
             <span>算法: {algorithm()}</span>
+            <span>模式: {useSyntax() ? '语法' : '行级'}</span>
           </div>
         </div>
       </Show>
@@ -456,6 +474,9 @@ function UnifiedDiff(props: { result: DiffResult; activeHunk: number; highlighte
             <div class="px-2 py-0.5 bg-slate-800/40 border-y border-slate-700/30">
               <span class="text-[9px] text-slate-500 font-mono">
                 @@ -{hunk.old_start},{hunk.old_lines} +{hunk.new_start},{hunk.new_lines} @@
+                <Show when={hunk.syntax_context}>
+                  <span class="ml-2 text-indigo-400/70"> {hunk.syntax_context}</span>
+                </Show>
               </span>
             </div>
             <For each={hunk.changes}>
@@ -560,6 +581,9 @@ function DiffPanel(props: { hunks: DiffHunk[]; side: "left" | "right"; activeHun
               <div class="px-2 py-0.5 bg-slate-800/40 border-y border-slate-700/30">
                 <span class="text-[9px] text-slate-500 font-mono">
                   @@ -{hunk.old_start},{hunk.old_lines} +{hunk.new_start},{hunk.new_lines} @@
+                  <Show when={hunk.syntax_context}>
+                    <span class="ml-2 text-indigo-400/70"> {hunk.syntax_context}</span>
+                  </Show>
                 </span>
               </div>
               <For each={hunk.changes}>

@@ -64,6 +64,8 @@ pub struct DiffHunk {
     pub new_start: usize,
     pub new_lines: usize,
     pub changes: Vec<DiffChange>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub syntax_context: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -248,6 +250,7 @@ impl DiffHunkBuilder {
             new_start: self.new_start,
             new_lines: self.new_lines,
             changes: self.changes,
+            syntax_context: None,
         }
     }
 }
