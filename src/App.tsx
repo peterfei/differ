@@ -1,4 +1,5 @@
 import { createSignal } from 'solid-js';
+import { DiffView } from './components/DiffView';
 
 type View = 'dashboard' | 'diff' | 'merge' | 'history' | 'settings';
 
@@ -31,7 +32,7 @@ function App() {
         </header>
 
         {currentView() === 'dashboard' && <Dashboard />}
-        {currentView() === 'diff' && <DiffWorkspace />}
+        {currentView() === 'diff' && <DiffView />}
         {currentView() === 'merge' && <MergeWorkspace />}
         {currentView() === 'history' && <HistoryView />}
         {currentView() === 'settings' && <SettingsView />}

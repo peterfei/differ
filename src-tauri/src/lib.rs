@@ -5,6 +5,7 @@ pub mod fs;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             commands::diff::diff_files,
             commands::diff::diff_text,
