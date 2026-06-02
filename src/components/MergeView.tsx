@@ -1,7 +1,8 @@
-import { createMemo, createSignal, For, Show } from 'solid-js';
+import { createMemo, createSignal, createEffect, For, Show } from 'solid-js';
 import { invoke } from '@tauri-apps/api/core';
 import type { MergeResult, MergeConflict } from '../types/merge';
 import { openFileDialog, saveFileDialog } from '../lib/dialog';
+import { mergePaths, setMergePaths } from '../lib/navStore';
 
 type ViewMode = 'source' | 'merged';
 
@@ -14,6 +15,21 @@ export function MergeView() {
   const [error, setError] = createSignal<string | null>(null);
   const [saved, setSaved] = createSignal(false);
   const [viewMode, setViewMode] = createSignal<ViewMode>('source');
+  const [editing, setEditing] = createSignal(false);
+  const [editText, setEditText] = createSignal('');
+
+  // 监听外部传入的合并路径（从文件对比导航过来时触发）
+  createEffect(() => {
+    const paths = mergePaths();
+    if (paths) {
+      setBasePath(paths.base);
+      setLeftPath(paths.left);
+      setRightPath(paths.right);
+      setMergePaths(null);
+      // 在下一个 tick 执行合并，确保信号已更新
+      setTimeout(() => runMerge(), 0);
+    }
+  });
 
   // Track which conflict is currently selected
   const [selectedConflictIndex, setSelectedConflictIndex] = createSignal<number>(0);
@@ -52,6 +68,10 @@ export function MergeView() {
       setError('请选择 base、left 和 right 三个文件');
       return;
     }
+    // 如果已有结果，先保存到撤销栈
+    if (result()) {
+      pushUndo(result()!);
+    }
     setLoading(true);
     setError(null);
     setSaved(false);
@@ -82,6 +102,27 @@ export function MergeView() {
     } catch (e) {
       setError(String(e));
     }
+  }
+
+  function finishEditing() {
+    const text = editText();
+    const currResult = result();
+    if (!currResult) return;
+
+    const newConflicts = parseConflictsFromText(text);
+    pushUndo(currResult);
+    setResult({
+      ...currResult,
+      merged_text: text,
+      conflicts: newConflicts,
+      has_conflicts: newConflicts.length > 0,
+    });
+    setEditing(false);
+    setSelectedConflictIndex(0);
+  }
+
+  function cancelEditing() {
+    setEditing(false);
   }
 
   // Navigate conflicts
@@ -186,7 +227,7 @@ export function MergeView() {
           disabled={loading()}
           class="px-4 py-1.5 text-xs font-medium rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white transition-colors"
         >
-          {loading() ? '合并中...' : '合并'}
+          {loading() ? '合并中...' : result() ? '重新合并' : '合并'}
         </button>
 
         <Show when={result() && !result()!.has_conflicts}>
@@ -223,13 +264,24 @@ export function MergeView() {
             </Show>
 
             <Show when={viewMode() === 'merged'}>
-              <div class="flex-1 overflow-hidden">
-                <MergeResultPanel
-                  mergedText={res().merged_text}
-                  conflicts={res().conflicts}
-                  selectedConflictIndex={selectedConflictIndex()}
-                />
-              </div>
+              <Show when={editing()} fallback={
+                <div class="flex-1 overflow-hidden">
+                  <MergeResultPanel
+                    mergedText={res().merged_text}
+                    conflicts={res().conflicts}
+                    selectedConflictIndex={selectedConflictIndex()}
+                  />
+                </div>
+              }>
+                <div class="flex-1 overflow-hidden">
+                  <textarea
+                    value={editText()}
+                    onInput={(e) => setEditText(e.currentTarget.value)}
+                    spellcheck={false}
+                    class="w-full h-full bg-slate-950 text-slate-300 font-mono text-xs leading-relaxed p-4 resize-none outline-none border-none"
+                  />
+                </div>
+              </Show>
             </Show>
           </>
         )}
@@ -242,8 +294,29 @@ export function MergeView() {
         </div>
       </Show>
 
+      {/* Edit mode bar (takes priority over conflict/success bars) */}
+      <Show when={editing() && viewMode() === 'merged'}>
+        <div class="flex-shrink-0 flex items-center justify-between px-4 py-2 bg-slate-900/90 border-t border-slate-800/60">
+          <span class="text-xs text-slate-400">正在手动编辑合并结果... 冲突标记会显示为文本，完成后自动重新识别</span>
+          <div class="flex items-center gap-2">
+            <button
+              onClick={cancelEditing}
+              class="px-3 py-1 text-xs font-medium rounded bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors"
+            >
+              取消
+            </button>
+            <button
+              onClick={finishEditing}
+              class="px-3 py-1 text-xs font-medium rounded bg-indigo-600 hover:bg-indigo-500 text-white transition-colors"
+            >
+              完成编辑
+            </button>
+          </div>
+        </div>
+      </Show>
+
       {/* Bottom conflict resolution bar */}
-      <Show when={result() && result()!.has_conflicts && viewMode() === 'merged'}>
+      <Show when={!editing() && result() && result()!.has_conflicts && viewMode() === 'merged'}>
         <div class="flex-shrink-0 flex items-center justify-between px-4 py-2 bg-slate-900/90 border-t border-slate-800/60">
           {/* Left side: conflict status */}
           <div class="flex items-center gap-3 text-xs">
@@ -288,6 +361,12 @@ export function MergeView() {
           {/* Right side: action buttons */}
           <div class="flex items-center gap-2">
             <button
+              onClick={() => { setEditText(result()!.merged_text); setEditing(true); }}
+              class="px-3 py-1 text-xs font-medium rounded bg-purple-700 hover:bg-purple-600 text-white transition-colors"
+            >
+              手动编辑
+            </button>
+            <button
               onClick={adoptLeft}
               class="px-3 py-1 text-xs font-medium rounded bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors"
             >
@@ -304,7 +383,7 @@ export function MergeView() {
       </Show>
 
       {/* Success message when all conflicts resolved */}
-      <Show when={result() && !result()!.has_conflicts}>
+      <Show when={!editing() && result() && !result()!.has_conflicts}>
         <div class="flex-shrink-0 flex items-center justify-between px-4 py-2 bg-emerald-950/40 border-t border-emerald-900/40">
           <div class="flex items-center gap-2 text-xs text-emerald-400">
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -312,12 +391,20 @@ export function MergeView() {
             </svg>
             <span>所有冲突已解决</span>
           </div>
-          <button
-            onClick={saveResult}
-            class="px-3 py-1 text-xs font-medium rounded bg-emerald-700 hover:bg-emerald-600 text-white transition-colors"
-          >
-            保存结果
-          </button>
+          <div class="flex items-center gap-2">
+            <button
+              onClick={() => { setEditText(result()!.merged_text); setEditing(true); }}
+              class="px-3 py-1 text-xs font-medium rounded bg-purple-700 hover:bg-purple-600 text-white transition-colors"
+            >
+              手动编辑
+            </button>
+            <button
+              onClick={saveResult}
+              class="px-3 py-1 text-xs font-medium rounded bg-emerald-700 hover:bg-emerald-600 text-white transition-colors"
+            >
+              保存结果
+            </button>
+          </div>
         </div>
       </Show>
     </div>
@@ -351,6 +438,42 @@ function adoptSide(
     },
     conflictCount: newConflicts.length,
   };
+}
+
+function parseConflictsFromText(text: string): MergeConflict[] {
+  const lines = text.split('\n');
+  const conflicts: MergeConflict[] = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    if (lines[i].startsWith('<<<<<<< Left')) {
+      const start_line = i + 1; // 1-based
+      const left_content: string[] = [];
+      const right_content: string[] = [];
+
+      i++;
+      while (i < lines.length && lines[i] !== '=======') {
+        left_content.push(lines[i]);
+        i++;
+      }
+      if (i < lines.length && lines[i] === '=======') {
+        i++;
+      }
+      while (i < lines.length && !lines[i].startsWith('>>>>>>> Right')) {
+        right_content.push(lines[i]);
+        i++;
+      }
+      if (i < lines.length && lines[i].startsWith('>>>>>>> Right')) {
+        i++;
+      }
+
+      conflicts.push({ left_content, right_content, start_line });
+    } else {
+      i++;
+    }
+  }
+
+  return conflicts;
 }
 
 // ── Source File Panel ──

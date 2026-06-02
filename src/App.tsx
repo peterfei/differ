@@ -4,7 +4,7 @@ import { SettingsView } from './components/SettingsView';
 import { DirectoryDiffView } from './components/DirectoryDiffView';
 import { MergeView } from './components/MergeView';
 import { getSettings } from './lib/settings';
-import { setDiffPaths } from './lib/navStore';
+import { setDiffPaths, setMergePaths } from './lib/navStore';
 
 type View = 'dashboard' | 'diff' | 'merge' | 'history' | 'settings';
 type DiffMode = 'file' | 'directory';
@@ -26,10 +26,15 @@ function App() {
     }
   });
 
-  function openFileDiff(left: string, right: string) {
-    setDiffPaths({ left, right });
+  function openFileDiff(left: string, right: string, base?: string) {
+    setDiffPaths({ left, right, base });
     setDiffMode('file');
     setCurrentView('diff');
+  }
+
+  function openMergeView(base: string, left: string, right: string) {
+    setMergePaths({ base, left, right });
+    setCurrentView('merge');
   }
 
   function openDirectoryDiff() {
@@ -67,10 +72,10 @@ function App() {
 
         {/* 保持两个 diff 视图常挂载，避免切换时状态丢失 */}
         <div class="flex-1 flex flex-col overflow-hidden" style={{ display: currentView() === 'diff' && diffMode() === 'file' ? 'flex' : 'none' }}>
-          <DiffView />
+          <DiffView onOpenMergeView={openMergeView} />
         </div>
         <div class="flex-1 flex flex-col overflow-hidden" style={{ display: currentView() === 'diff' && diffMode() === 'directory' ? 'flex' : 'none' }}>
-          <DirectoryDiffView onOpenFileDiff={openFileDiff} leftPath="" rightPath="" />
+          <DirectoryDiffView onOpenFileDiff={openFileDiff} onOpenMergeView={openMergeView} leftPath="" rightPath="" />
         </div>
 
         {currentView() === 'merge' && <MergeView />}

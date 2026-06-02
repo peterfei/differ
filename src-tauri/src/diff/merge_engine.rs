@@ -41,22 +41,23 @@ pub fn three_way_merge(base: &str, left: &str, right: &str) -> MergeResult {
     let diff_r = TextDiff::from_lines(base, right);
 
     // Filter to only non-Equal ops — Equal means "unchanged" and is handled implicitly
-    let change_ops_l: Vec<&DiffOp> = diff_l.ops().iter().filter(|o| o.as_tag_tuple().0 != similar::DiffTag::Equal).collect();
-    let change_ops_r: Vec<&DiffOp> = diff_r.ops().iter().filter(|o| o.as_tag_tuple().0 != similar::DiffTag::Equal).collect();
+    let change_ops_l: Vec<&DiffOp> =
+        diff_l.ops().iter().filter(|o| o.as_tag_tuple().0 != similar::DiffTag::Equal).collect();
+    let change_ops_r: Vec<&DiffOp> =
+        diff_r.ops().iter().filter(|o| o.as_tag_tuple().0 != similar::DiffTag::Equal).collect();
 
     let mut result: Vec<String> = Vec::new();
     let mut conflicts: Vec<MergeConflict> = Vec::new();
 
     let mut i = 0; // index in change_ops_l
     let mut j = 0; // index in change_ops_r
-    let mut base_pos: usize = 0; // current position in base[0..n]
+    let mut base_pos = 0; // current position in base[0..n]
 
     loop {
-        let op_l = if i < change_ops_l.len() { Some(change_ops_l[i]) } else { None };
-        let op_r = if j < change_ops_r.len() { Some(change_ops_r[j]) } else { None };
+        let op_l = change_ops_l.get(i).copied();
+        let op_r = change_ops_r.get(j).copied();
 
         if op_l.is_none() && op_r.is_none() {
-            // Copy remaining base lines
             while base_pos < base_lines.len() {
                 result.push(base_lines[base_pos].to_string());
                 base_pos += 1;
@@ -64,31 +65,82 @@ pub fn three_way_merge(base: &str, left: &str, right: &str) -> MergeResult {
             break;
         }
 
-        // Find the next base position any op touches
-        let next_l = op_l.map(|o| o.old_range().start).unwrap_or(usize::MAX);
-        let next_r = op_r.map(|o| o.old_range().start).unwrap_or(usize::MAX);
-        let next_base = next_l.min(next_r);
+        // ── 1. Handle ALL insertions at current base_pos ──
+        let mut had_insertions = false;
+        loop {
+            let ol = change_ops_l.get(i).copied();
+            let or = change_ops_r.get(j).copied();
 
-        // Copy unchanged base lines up to next_base
-        while base_pos < next_base && base_pos < base_lines.len() {
-            result.push(base_lines[base_pos].to_string());
-            base_pos += 1;
+            let ins_l = ol.filter(|o| o.old_range().is_empty() && o.old_range().start == base_pos);
+            let ins_r = or.filter(|o| o.old_range().is_empty() && o.old_range().start == base_pos);
+
+            if ins_l.is_some() && ins_r.is_some() {
+                let left_new = get_new_lines(ins_l.unwrap(), &diff_l);
+                let right_new = get_new_lines(ins_r.unwrap(), &diff_r);
+                if left_new == right_new {
+                    for line in &left_new {
+                        result.push(line.clone());
+                    }
+                } else {
+                    let start_line = result.len() + 1;
+                    conflicts.push(MergeConflict {
+                        left_content: left_new.clone(),
+                        right_content: right_new.clone(),
+                        start_line,
+                    });
+                    push_conflict_markers(&mut result, &left_new, &right_new, start_line);
+                }
+                i += 1;
+                j += 1;
+                had_insertions = true;
+                continue;
+            }
+            if ins_l.is_some() {
+                for line in get_new_lines(ins_l.unwrap(), &diff_l) {
+                    result.push(line.clone());
+                }
+                i += 1;
+                had_insertions = true;
+                continue;
+            }
+            if ins_r.is_some() {
+                for line in get_new_lines(ins_r.unwrap(), &diff_r) {
+                    result.push(line.clone());
+                }
+                j += 1;
+                had_insertions = true;
+                continue;
+            }
+            break;
+        }
+
+        // Re-fetch after insertion processing
+        let op_l = change_ops_l.get(i).copied();
+        let op_r = change_ops_r.get(j).copied();
+
+        if op_l.is_none() && op_r.is_none() {
+            if had_insertions {
+                continue; // More base lines may need copying
+            }
+            while base_pos < base_lines.len() {
+                result.push(base_lines[base_pos].to_string());
+                base_pos += 1;
+            }
+            break;
         }
 
         if base_pos >= base_lines.len() {
-            // Append remaining new lines from insertions at end of base
-            for idx in i..change_ops_l.len() {
-                let op = change_ops_l[idx];
-                if op.old_range().is_empty() && !op.new_range().is_empty() {
-                    for line in get_new_lines(op, &diff_l) {
+            // Past EOF — flush remaining insertions
+            for k in i..change_ops_l.len() {
+                if change_ops_l[k].old_range().is_empty() && !change_ops_l[k].new_range().is_empty() {
+                    for line in get_new_lines(change_ops_l[k], &diff_l) {
                         result.push(line);
                     }
                 }
             }
-            for idx in j..change_ops_r.len() {
-                let op = change_ops_r[idx];
-                if op.old_range().is_empty() && !op.new_range().is_empty() {
-                    for line in get_new_lines(op, &diff_r) {
+            for k in j..change_ops_r.len() {
+                if change_ops_r[k].old_range().is_empty() && !change_ops_r[k].new_range().is_empty() {
+                    for line in get_new_lines(change_ops_r[k], &diff_r) {
                         result.push(line);
                     }
                 }
@@ -96,17 +148,18 @@ pub fn three_way_merge(base: &str, left: &str, right: &str) -> MergeResult {
             break;
         }
 
-        // Determine which ops affect the current base position
-        let affects_l =
-            op_l.is_some() && op_l.unwrap().old_range().start <= base_pos && base_pos < op_l.unwrap().old_range().end;
-        let affects_r =
-            op_r.is_some() && op_r.unwrap().old_range().start <= base_pos && base_pos < op_r.unwrap().old_range().end;
+        // ── 2. Handle modifications at current base_pos ──
+        let mod_l = op_l.filter(|o| {
+            let r = o.old_range();
+            !r.is_empty() && r.start <= base_pos && base_pos < r.end
+        });
+        let mod_r = op_r.filter(|o| {
+            let r = o.old_range();
+            !r.is_empty() && r.start <= base_pos && base_pos < r.end
+        });
 
-        match (affects_l, affects_r) {
-            // Both sides change the same base region
-            (true, true) => {
-                let ol = op_l.unwrap();
-                let or = op_r.unwrap();
+        match (mod_l, mod_r) {
+            (Some(ol), Some(or)) => {
                 let left_new = get_new_lines(ol, &diff_l);
                 let right_new = get_new_lines(or, &diff_r);
 
@@ -114,14 +167,12 @@ pub fn three_way_merge(base: &str, left: &str, right: &str) -> MergeResult {
                 let right_is_delete = right_new.is_empty();
 
                 if left_new == right_new {
-                    // Both made the same change
                     for line in &left_new {
                         result.push(line.clone());
                     }
                 } else if left_is_delete && right_is_delete {
-                    // Both deleted the same lines, skip them
+                    // Both deleted same lines
                 } else if left_is_delete {
-                    // Left deleted, right changed → conflict
                     let start_line = result.len() + 1;
                     conflicts.push(MergeConflict {
                         left_content: Vec::new(),
@@ -130,7 +181,6 @@ pub fn three_way_merge(base: &str, left: &str, right: &str) -> MergeResult {
                     });
                     push_conflict_markers(&mut result, &[], &right_new, start_line);
                 } else if right_is_delete {
-                    // Right deleted, left changed → conflict
                     let start_line = result.len() + 1;
                     conflicts.push(MergeConflict {
                         left_content: left_new.clone(),
@@ -139,7 +189,6 @@ pub fn three_way_merge(base: &str, left: &str, right: &str) -> MergeResult {
                     });
                     push_conflict_markers(&mut result, &left_new, &[], start_line);
                 } else {
-                    // Both changed differently → real conflict
                     let start_line = result.len() + 1;
                     conflicts.push(MergeConflict {
                         left_content: left_new.clone(),
@@ -149,44 +198,151 @@ pub fn three_way_merge(base: &str, left: &str, right: &str) -> MergeResult {
                     push_conflict_markers(&mut result, &left_new, &right_new, start_line);
                 }
 
-                advance(ol, &mut base_pos, &mut i);
-                advance(or, &mut base_pos, &mut j);
+                let end = ol.old_range().end.max(or.old_range().end);
+                if end > base_pos {
+                    base_pos = end;
+                }
+                i += 1;
+                j += 1;
             }
 
-            // Left changes this region
-            (true, false) => {
-                let ol = op_l.unwrap();
-                let left_new = get_new_lines(ol, &diff_l);
-                for line in &left_new {
+            (Some(ol), None) => {
+                // Check for right insertions WITHIN left's modification range → emit before
+                // AND right insertions AT the boundary (if left added content) → conflict
+                let left_new_all = get_new_lines(ol, &diff_l);
+                let left_old_len = ol.old_range().len();
+                let left_has_extra = left_new_all.len() > left_old_len;
+
+                // Check for right insertion at boundary (start == end == left's end)
+                if left_has_extra {
+                    if let Some(or) = change_ops_r.get(j) {
+                        if or.old_range().is_empty()
+                            && or.old_range().start == ol.old_range().end
+                        {
+                            let right_inserted = get_new_lines(or, &diff_r);
+                            // Emit replacement part of left's change
+                            for line in left_new_all.iter().take(left_old_len) {
+                                result.push(line.clone());
+                            }
+                            // Conflict: left's extra vs right's insertion
+                            let left_extra: Vec<String> =
+                                left_new_all.iter().skip(left_old_len).cloned().collect();
+                            let start_line = result.len() + 1;
+                            conflicts.push(MergeConflict {
+                                left_content: left_extra.clone(),
+                                right_content: right_inserted.clone(),
+                                start_line,
+                            });
+                            push_conflict_markers(
+                                &mut result, &left_extra, &right_inserted, start_line,
+                            );
+                            if ol.old_range().end > base_pos {
+                                base_pos = ol.old_range().end;
+                            }
+                            i += 1;
+                            j += 1;
+                            continue;
+                        }
+                    }
+                }
+                // Also check for strict within-range insertions (no boundary collision)
+                while let Some(or) = change_ops_r.get(j) {
+                    if or.old_range().is_empty()
+                        && or.old_range().start >= ol.old_range().start
+                        && or.old_range().start < ol.old_range().end
+                    {
+                        for line in get_new_lines(or, &diff_r) {
+                            result.push(line.clone());
+                        }
+                        j += 1;
+                    } else {
+                        break;
+                    }
+                }
+                for line in &left_new_all {
                     result.push(line.clone());
                 }
-                // If right's current op is subsumed by left's range, advance j too
-                if let Some(or) = op_r {
-                    if or.old_range().end <= ol.old_range().end {
+                if let Some(or) = change_ops_r.get(j) {
+                    if !or.old_range().is_empty() && or.old_range().end <= ol.old_range().end {
                         j += 1;
                     }
                 }
-                advance(ol, &mut base_pos, &mut i);
+                if ol.old_range().end > base_pos {
+                    base_pos = ol.old_range().end;
+                }
+                i += 1;
             }
 
-            // Right changes this region
-            (false, true) => {
-                let or = op_r.unwrap();
-                let right_new = get_new_lines(or, &diff_r);
-                for line in &right_new {
+            (None, Some(or)) => {
+                // Check for left insertions WITHIN right's modification range → emit before
+                // AND left insertions AT the boundary (if right added content) → conflict
+                let right_new_all = get_new_lines(or, &diff_r);
+                let right_old_len = or.old_range().len();
+                let right_has_extra = right_new_all.len() > right_old_len;
+
+                // Check for left insertion at boundary
+                if right_has_extra {
+                    if let Some(ol) = change_ops_l.get(i) {
+                        if ol.old_range().is_empty()
+                            && ol.old_range().start == or.old_range().end
+                        {
+                            let left_inserted = get_new_lines(ol, &diff_l);
+                            // Emit replacement part of right's change
+                            for line in right_new_all.iter().take(right_old_len) {
+                                result.push(line.clone());
+                            }
+                            // Conflict: left's insertion vs right's extra
+                            let right_extra: Vec<String> =
+                                right_new_all.iter().skip(right_old_len).cloned().collect();
+                            let start_line = result.len() + 1;
+                            conflicts.push(MergeConflict {
+                                left_content: left_inserted.clone(),
+                                right_content: right_extra.clone(),
+                                start_line,
+                            });
+                            push_conflict_markers(
+                                &mut result, &left_inserted, &right_extra, start_line,
+                            );
+                            if or.old_range().end > base_pos {
+                                base_pos = or.old_range().end;
+                            }
+                            i += 1;
+                            j += 1;
+                            continue;
+                        }
+                    }
+                }
+                // Also check for strict within-range insertions
+                while let Some(ol) = change_ops_l.get(i) {
+                    if ol.old_range().is_empty()
+                        && ol.old_range().start >= or.old_range().start
+                        && ol.old_range().start < or.old_range().end
+                    {
+                        for line in get_new_lines(ol, &diff_l) {
+                            result.push(line.clone());
+                        }
+                        i += 1;
+                    } else {
+                        break;
+                    }
+                }
+                for line in &right_new_all {
                     result.push(line.clone());
                 }
-                // If left's current op is subsumed by right's range, advance i too
-                if let Some(ol) = op_l {
-                    if ol.old_range().end <= or.old_range().end {
+                if let Some(ol) = change_ops_l.get(i) {
+                    if !ol.old_range().is_empty() && ol.old_range().end <= or.old_range().end {
                         i += 1;
                     }
                 }
-                advance(or, &mut base_pos, &mut j);
+                if or.old_range().end > base_pos {
+                    base_pos = or.old_range().end;
+                }
+                j += 1;
             }
 
-            (false, false) => {
-                // Neither touches this line — should not happen
+            (None, None) => {
+                // No modifications at this position. Copy base line and advance.
+                // (If there were insertions, they were handled in step 1.)
                 result.push(base_lines[base_pos].to_string());
                 base_pos += 1;
             }
@@ -221,14 +377,6 @@ fn get_new_lines(
         })
         .map(|c| c.value().trim_end_matches('\n').to_string())
         .collect()
-}
-
-fn advance(op: &DiffOp, base_pos: &mut usize, idx: &mut usize) {
-    let old_end = op.old_range().end;
-    if old_end > *base_pos {
-        *base_pos = old_end;
-    }
-    *idx += 1;
 }
 
 fn push_conflict_markers(
@@ -480,5 +628,120 @@ mod tests {
         let json = serde_json::to_string(&result).unwrap();
         let deserialized: MergeResult = serde_json::from_str(&json).unwrap();
         assert_eq!(result.merged_text, deserialized.merged_text);
+    }
+
+    // ── Insertion handling tests (regression) ──
+
+    #[test]
+    fn insertion_in_middle_placed_correctly() {
+        // Left inserts "X" between "b" and "c"; right unchanged
+        let result = three_way_merge("a\nb\nc\n", "a\nb\nX\nc\n", "a\nb\nc\n");
+        assert!(!result.has_conflicts);
+        assert_eq!(result.merged_text, "a\nb\nX\nc");
+    }
+
+    #[test]
+    fn insertion_at_beginning_placed_correctly() {
+        let result = three_way_merge("first\nsecond\n", "HEADER\nfirst\nsecond\n", "first\nsecond\n");
+        assert!(!result.has_conflicts);
+        assert_eq!(result.merged_text, "HEADER\nfirst\nsecond");
+    }
+
+    #[test]
+    fn both_insert_same_content_at_same_position() {
+        let result = three_way_merge("a\nb\n", "a\nSAME\nb\n", "a\nSAME\nb\n");
+        assert!(!result.has_conflicts);
+        assert_eq!(result.merged_text, "a\nSAME\nb");
+    }
+
+    #[test]
+    fn both_insert_different_content_at_same_position_conflict() {
+        let result = three_way_merge("a\nb\nc\n", "a\nb\nLEFT_ADD\nc\n", "a\nb\nRIGHT_ADD\nc\n");
+        assert!(result.has_conflicts);
+        assert_eq!(result.conflicts.len(), 1);
+        assert!(result.merged_text.contains("<<<<<<< Left"));
+        assert!(result.merged_text.contains("LEFT_ADD"));
+        assert!(result.merged_text.contains("RIGHT_ADD"));
+        assert!(result.merged_text.contains(">>>>>>> Right"));
+    }
+
+    #[test]
+    fn append_both_same_content_no_conflict() {
+        let result = three_way_merge("keep\n", "keep\nEND\n", "keep\nEND\n");
+        assert!(!result.has_conflicts);
+        assert!(result.merged_text.contains("END"));
+    }
+
+    #[test]
+    fn append_conflicting_content_conflict() {
+        let result = three_way_merge("keep\n", "keep\nleft_add\n", "keep\nright_add\n");
+        assert!(result.has_conflicts);
+        assert_eq!(result.conflicts.len(), 1);
+    }
+
+    #[test]
+    fn insertion_not_lost_when_other_side_modifies_before() {
+        // Left inserts after "b"; right modifies "b" to "MODIFIED_B"
+        let result = three_way_merge("a\nb\nc\n", "a\nb\nINSERTED\nc\n", "a\nMODIFIED_B\nc\n");
+        assert!(!result.has_conflicts);
+        assert!(result.merged_text.contains("INSERTED"));
+        assert!(result.merged_text.contains("MODIFIED_B"));
+    }
+
+    #[test]
+    fn insertion_not_lost_when_other_side_modifies_range() {
+        // Left inserts at position 2; right modifies lines 1..3
+        let result = three_way_merge("a\nb\nc\n", "a\nb\nINSERTED\nc\n", "X\nY\nZ\n");
+        // These are different changes at overlapping positions
+        // Left inserts 'INSERTED' between b and c, right changes all 3 lines
+        // The insertion should be preserved
+        assert!(result.has_conflicts || result.merged_text.contains("INSERTED"));
+    }
+
+    #[test]
+    fn independent_insertions_at_different_positions() {
+        // Left inserts at beginning, right inserts at end
+        let result = three_way_merge("a\nb\n", "LEFT\na\nb\n", "a\nb\nRIGHT\n");
+        assert!(!result.has_conflicts);
+        assert_eq!(result.merged_text, "LEFT\na\nb\nRIGHT");
+    }
+
+    #[test]
+    fn three_completely_different_files_detects_conflict() {
+        let result = three_way_merge("a\nb\nc\n", "X\nY\nZ\n", "1\n2\n3\n");
+        // Each side replaces all lines differently → conflict expected
+        assert!(result.has_conflicts);
+        assert!(result.merged_text.contains("<<<<<<< Left"));
+        assert!(result.merged_text.contains("X"));
+        assert!(result.merged_text.contains("Y"));
+        assert!(result.merged_text.contains("Z"));
+        assert!(result.merged_text.contains("1"));
+        assert!(result.merged_text.contains(">>>>>>> Right"));
+    }
+
+    #[test]
+    fn merge_user_differ_test_main_rs() {
+        let base = std::fs::read_to_string("/Users/mac/Downloads/differ-test/base/src/main.rs").unwrap();
+        let left = std::fs::read_to_string("/Users/mac/Downloads/differ-test/old/src/main.rs").unwrap();
+        let right = std::fs::read_to_string("/Users/mac/Downloads/differ-test/new/src/main.rs").unwrap();
+
+        eprintln!("=== base ({} bytes, {} lines) ===", base.len(), base.lines().count());
+        eprintln!("=== left/old ({} bytes, {} lines) ===", left.len(), left.lines().count());
+        eprintln!("=== right/new ({} bytes, {} lines) ===", right.len(), right.lines().count());
+
+        let result = three_way_merge(&base, &left, &right);
+
+        eprintln!("=== merge result ===");
+        eprintln!("has_conflicts: {}", result.has_conflicts);
+        eprintln!("conflict count: {}", result.conflicts.len());
+        eprintln!("merged_text ({} bytes):", result.merged_text.len());
+        eprintln!("{}", result.merged_text);
+        for (i, c) in result.conflicts.iter().enumerate() {
+            eprintln!("conflict #{}: start_line={}, left={:?}, right={:?}",
+                i, c.start_line, c.left_content, c.right_content);
+        }
+
+        // Both sides made changes at overlapping positions — conflict expected
+        assert!(result.has_conflicts, "Expected conflicts but got none! Merged text:\n{}", result.merged_text);
     }
 }

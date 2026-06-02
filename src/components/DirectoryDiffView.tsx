@@ -2,7 +2,8 @@ import { createSignal, createMemo, Show, For } from "solid-js";
 import type { DirectoryDiffResult, DirectoryEntry, EntryStatus } from "../types/diff";
 
 interface Props {
-  onOpenFileDiff: (leftPath: string, rightPath: string) => void;
+  onOpenFileDiff: (leftPath: string, rightPath: string, basePath?: string) => void;
+  onOpenMergeView: (base: string, left: string, right: string) => void;
   leftPath: string;
   rightPath: string;
 }
@@ -12,6 +13,7 @@ export function DirectoryDiffView(props: Props) {
   const [loading, setLoading] = createSignal(false);
   const [leftDir, setLeftDir] = createSignal(props.leftPath);
   const [rightDir, setRightDir] = createSignal(props.rightPath);
+  const [baseDir, setBaseDir] = createSignal('');
   const [expanded, setExpanded] = createSignal<Set<string>>(new Set());
   const [filter, setFilter] = createSignal<EntryStatus | "all">("all");
 
@@ -22,12 +24,14 @@ export function DirectoryDiffView(props: Props) {
     return filterTree(r.entries, filter());
   });
 
-  async function selectDir(side: "left" | "right") {
+  async function selectDir(side: "left" | "right" | "base") {
     const { open } = await import("@tauri-apps/plugin-dialog");
-    const dir = await open({ multiple: false, title: `选择${side === "left" ? "原始" : "修改后"}目录`, directory: true });
+    const titles: Record<string, string> = { left: "原始目录", right: "修改后目录", base: "Base 目录（共同祖先）" };
+    const dir = await open({ multiple: false, title: `选择${titles[side]}`, directory: true });
     if (!dir) return;
     if (side === "left") setLeftDir(dir as string);
-    else setRightDir(dir as string);
+    else if (side === "right") setRightDir(dir as string);
+    else setBaseDir(dir as string);
   }
 
   async function runDiff() {
@@ -82,6 +86,14 @@ export function DirectoryDiffView(props: Props) {
               <span class="max-w-[200px] truncate">{rightDir() || "选择修改后目录..."}</span>
             </button>
             <button
+              onClick={selectDir.bind(null, "base")}
+              class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg transition-colors"
+              title="可选：提供 base 目录后可从此处直接进入三路合并"
+            >
+              <span class="text-violet-400 font-mono text-[10px]">B:</span>
+              <span class="max-w-[200px] truncate">{baseDir() || "Base(可选)..."}</span>
+            </button>
+            <button
               onClick={runDiff}
               disabled={!leftDir() || !rightDir()}
               class="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-40"
@@ -132,7 +144,7 @@ export function DirectoryDiffView(props: Props) {
         >
           <div class="p-4">
             <For each={filteredEntries()}>
-              {(entry) => <FileTreeNode entry={entry} depth={0} expanded={expanded()} onToggle={toggleExpand} onOpenDiff={openFileDiff} />}
+              {(entry) => <FileTreeNode entry={entry} depth={0} expanded={expanded()} onToggle={toggleExpand} onOpenDiff={openFileDiff} hasBase={!!baseDir()} />}
             </For>
           </div>
         </Show>
@@ -155,7 +167,12 @@ export function DirectoryDiffView(props: Props) {
     if (entry.is_dir || entry.status === "Same" || entry.status === "Added" || entry.status === "Removed") return;
     const fullLeft = joinPath(leftDir(), entry.path);
     const fullRight = joinPath(rightDir(), entry.path);
-    props.onOpenFileDiff(fullLeft, fullRight);
+    const fullBase = baseDir() ? joinPath(baseDir(), entry.path) : '';
+    if (fullBase) {
+      props.onOpenFileDiff(fullLeft, fullRight, fullBase);
+    } else {
+      props.onOpenFileDiff(fullLeft, fullRight);
+    }
   }
 }
 
@@ -167,6 +184,7 @@ function FileTreeNode(props: {
   expanded: Set<string>;
   onToggle: (path: string) => void;
   onOpenDiff: (entry: DirectoryEntry) => void;
+  hasBase?: boolean;
 }) {
   const e = () => props.entry;
   const hasChildren = () => e().is_dir && e().children && e().children!.length > 0;
@@ -220,7 +238,7 @@ function FileTreeNode(props: {
         </span>
         {/* Click hint for modified files */}
         <Show when={e().status === "Modified"}>
-          <span class="text-[9px] text-indigo-500/60 ml-1">点击查看 diff</span>
+          <span class="text-[9px] text-indigo-500/60 ml-1">{props.hasBase ? "点击 diff / 三路合并" : "点击查看 diff"}</span>
         </Show>
       </div>
 
