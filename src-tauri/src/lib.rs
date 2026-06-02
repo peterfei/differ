@@ -14,6 +14,9 @@ pub fn run() {
             commands::diff::diff_files,
             commands::diff::diff_text,
             commands::directory::diff_directories_command,
+            commands::merge::merge_files,
+            commands::merge::merge_text,
+            commands::merge::save_text_to_file,
             commands::watcher::watch_files,
             commands::watcher::unwatch_files,
         ])

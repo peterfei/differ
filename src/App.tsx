@@ -2,7 +2,9 @@ import { createSignal, onMount } from 'solid-js';
 import { DiffView } from './components/DiffView';
 import { SettingsView } from './components/SettingsView';
 import { DirectoryDiffView } from './components/DirectoryDiffView';
+import { MergeView } from './components/MergeView';
 import { getSettings } from './lib/settings';
+import { setDiffPaths } from './lib/navStore';
 
 type View = 'dashboard' | 'diff' | 'merge' | 'history' | 'settings';
 type DiffMode = 'file' | 'directory';
@@ -10,7 +12,6 @@ type DiffMode = 'file' | 'directory';
 function App() {
   const [currentView, setCurrentView] = createSignal<View>('diff');
   const [diffMode, setDiffMode] = createSignal<DiffMode>('file');
-  const [diffPaths, setDiffPaths] = createSignal<{ left: string; right: string } | null>(null);
 
   onMount(async () => {
     // 应用保存的主题设置
@@ -66,13 +67,13 @@ function App() {
 
         {/* 保持两个 diff 视图常挂载，避免切换时状态丢失 */}
         <div class="flex-1 flex flex-col overflow-hidden" style={{ display: currentView() === 'diff' && diffMode() === 'file' ? 'flex' : 'none' }}>
-          <DiffView initialLeftPath={diffPaths()?.left} initialRightPath={diffPaths()?.right} />
+          <DiffView />
         </div>
         <div class="flex-1 flex flex-col overflow-hidden" style={{ display: currentView() === 'diff' && diffMode() === 'directory' ? 'flex' : 'none' }}>
           <DirectoryDiffView onOpenFileDiff={openFileDiff} leftPath="" rightPath="" />
         </div>
 
-        {currentView() === 'merge' && <MergeWorkspace />}
+        {currentView() === 'merge' && <MergeView />}
         {currentView() === 'history' && <HistoryView />}
         {currentView() === 'settings' && <SettingsView />}
       </main>
@@ -108,12 +109,6 @@ function NavButton({ icon, label, active, onClick }: { icon: string; label: stri
 // Placeholder views - implemented in separate files
 function Dashboard() {
   return <div class="flex-1 flex items-center justify-center text-slate-500 text-sm">Dashboard — 即将实现</div>;
-}
-function DiffWorkspace() {
-  return <div class="flex-1 flex items-center justify-center text-slate-500 text-sm">Diff Workspace — 即将实现</div>;
-}
-function MergeWorkspace() {
-  return <div class="flex-1 flex items-center justify-center text-slate-500 text-sm">Merge Workspace — 即将实现</div>;
 }
 function HistoryView() {
   return <div class="flex-1 flex items-center justify-center text-slate-500 text-sm">History — 即将实现</div>;

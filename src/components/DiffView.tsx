@@ -2,6 +2,7 @@ import { createSignal, For, Show, createMemo, createEffect, onMount, onCleanup }
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import type { DiffResult, DiffHunk, DiffChange, ChangeType } from "../types/diff";
 import { detectLanguage, highlightFile, type HighlightedLines } from "../lib/highlight";
+import { diffPaths as navDiffPaths } from "../lib/navStore";
 
 // ── 文本重建：从 hunks 中提取完整文件内容 ──
 
@@ -20,39 +21,32 @@ function reconstructText(hunks: DiffHunk[], side: "left" | "right"): string {
 
 // ── DiffView: 主管口组件 ──
 
-export function DiffView(props?: { initialLeftPath?: string; initialRightPath?: string }) {
+export function DiffView() {
   const [result, setResult] = createSignal<DiffResult | null>(null);
   const [activeHunk, setActiveHunk] = createSignal(0);
   const [algorithm, setAlgorithm] = createSignal<"Myers" | "Patience">("Myers");
-  const [leftPath, setLeftPath] = createSignal(props?.initialLeftPath ?? "");
-  const [rightPath, setRightPath] = createSignal(props?.initialRightPath ?? "");
+  const [leftPath, setLeftPath] = createSignal("");
+  const [rightPath, setRightPath] = createSignal("");
   const [loading, setLoading] = createSignal(false);
   const [viewMode, setViewMode] = createSignal<"side-by-side" | "unified">("side-by-side");
   const [goToLine, setGoToLine] = createSignal(false);
   const [targetLine, setTargetLine] = createSignal("");
   const [highlightedLeft, setHighlightedLeft] = createSignal<HighlightedLines | null>(null);
   const [highlightedRight, setHighlightedRight] = createSignal<HighlightedLines | null>(null);
+  const [error, setError] = createSignal<string | null>(null);
 
   const [fileChanged, setFileChanged] = createSignal(false);
 
   let unlisten: UnlistenFn | undefined;
 
   // 监听外部传入的路径变化（从目录对比导航过来时触发）
-  let firstRun = true;
   createEffect(() => {
-    const left = props?.initialLeftPath;
-    const right = props?.initialRightPath;
-    if (left && right) {
-      const curLeft = leftPath();
-      const curRight = rightPath();
-      if (left !== curLeft || right !== curRight) {
-        setLeftPath(left);
-        setRightPath(right);
-        runDiff();
-      } else if (firstRun) {
-        firstRun = false;
-        runDiff();
-      }
+    const paths = navDiffPaths();
+    if (paths) {
+      setLeftPath(paths.left);
+      setRightPath(paths.right);
+      setError(null);
+      runDiff();
     }
   });
 
@@ -198,6 +192,7 @@ export function DiffView(props?: { initialLeftPath?: string; initialRightPath?: 
       watch([leftPath(), rightPath()]);
     } catch (e) {
       console.error("Diff failed:", e);
+      setError(String(e));
     } finally {
       setLoading(false);
     }
@@ -310,6 +305,16 @@ export function DiffView(props?: { initialLeftPath?: string; initialRightPath?: 
           </Show>
         </div>
       </div>
+
+      {/* Error display */}
+      <Show when={error()}>
+        <div class="flex-shrink-0 bg-red-950/50 border-b border-red-900/40 px-4 py-2 flex items-center gap-2">
+          <svg class="w-4 h-4 text-red-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+          </svg>
+          <span class="text-xs text-red-400">{error()}</span>
+        </div>
+      </Show>
 
       {/* File change notification */}
       <Show when={fileChanged()}>
