@@ -12,6 +12,7 @@ interface Props {
 export function DirectoryDiffView(props: Props) {
   const [result, setResult] = createSignal<DirectoryDiffResult | null>(null);
   const [loading, setLoading] = createSignal(false);
+  const [error, setError] = createSignal<string | null>(null);
   const [leftDir, setLeftDir] = createSignal(props.leftPath);
   const [rightDir, setRightDir] = createSignal(props.rightPath);
   const [baseDir, setBaseDir] = createSignal('');
@@ -61,6 +62,7 @@ export function DirectoryDiffView(props: Props) {
       setExpanded(all);
     } catch (e) {
       console.error("Directory diff failed:", e);
+      setError(String(e));
     } finally {
       setLoading(false);
     }
@@ -136,6 +138,21 @@ export function DirectoryDiffView(props: Props) {
           </Show>
         </div>
       </div>
+
+      {/* Error banner */}
+      <Show when={error()}>
+        <div class="flex items-center gap-2 px-4 py-2 bg-red-900/30 border-b border-red-800/50 text-red-300 text-xs">
+          <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+          </svg>
+          <span class="flex-1">目录对比失败: {error()}</span>
+          <button onClick={() => setError(null)} class="text-red-400 hover:text-red-300">
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </Show>
 
       {/* Tree Content */}
       <div class="flex-1 overflow-y-auto no-scrollbar">
@@ -240,8 +257,16 @@ function FileTreeNode(props: {
           {iconMap[e().status]}
         </span>
         {/* File/folder icon */}
-        <span class="flex-shrink-0 text-slate-500 text-[11px]">
-          {e().is_dir ? "📁" : "📄"}
+        <span class="flex-shrink-0 text-slate-500">
+          {e().is_dir ? (
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
+            </svg>
+          ) : (
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+            </svg>
+          )}
         </span>
         {/* Name */}
         <span class={`text-xs truncate ${e().status === "Same" ? "text-slate-500" : "text-slate-200"}`}>

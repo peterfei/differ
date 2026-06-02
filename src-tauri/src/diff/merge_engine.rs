@@ -720,26 +720,13 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires local test fixtures at /Users/mac/Downloads/differ-test/"]
     fn merge_user_differ_test_main_rs() {
         let base = std::fs::read_to_string("/Users/mac/Downloads/differ-test/base/src/main.rs").unwrap();
         let left = std::fs::read_to_string("/Users/mac/Downloads/differ-test/old/src/main.rs").unwrap();
         let right = std::fs::read_to_string("/Users/mac/Downloads/differ-test/new/src/main.rs").unwrap();
 
-        eprintln!("=== base ({} bytes, {} lines) ===", base.len(), base.lines().count());
-        eprintln!("=== left/old ({} bytes, {} lines) ===", left.len(), left.lines().count());
-        eprintln!("=== right/new ({} bytes, {} lines) ===", right.len(), right.lines().count());
-
         let result = three_way_merge(&base, &left, &right);
-
-        eprintln!("=== merge result ===");
-        eprintln!("has_conflicts: {}", result.has_conflicts);
-        eprintln!("conflict count: {}", result.conflicts.len());
-        eprintln!("merged_text ({} bytes):", result.merged_text.len());
-        eprintln!("{}", result.merged_text);
-        for (i, c) in result.conflicts.iter().enumerate() {
-            eprintln!("conflict #{}: start_line={}, left={:?}, right={:?}",
-                i, c.start_line, c.left_content, c.right_content);
-        }
 
         // Both sides made changes at overlapping positions — conflict expected
         assert!(result.has_conflicts, "Expected conflicts but got none! Merged text:\n{}", result.merged_text);

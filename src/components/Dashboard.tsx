@@ -1,7 +1,6 @@
 import { createSignal, For, Show, onMount } from "solid-js";
 import { Card, CardHeader, StatCard, ActionCard, EmptyState } from "../dsl";
 import { getHistory } from "../lib/historyStore";
-import { openFileDialog } from "../lib/dialog";
 import { setDiffPaths } from "../lib/navStore";
 import type { HistoryEntry } from "../types/history";
 

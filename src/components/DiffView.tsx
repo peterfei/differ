@@ -4,6 +4,7 @@ import type { DiffResult, DiffHunk, DiffChange, ChangeType } from "../types/diff
 import { detectLanguage, highlightFile, type HighlightedLines } from "../lib/highlight";
 import { diffPaths as navDiffPaths } from "../lib/navStore";
 import { addHistoryEntry } from "../lib/historyStore";
+import { getSettings } from "../lib/settings";
 
 // ── 文本重建：从 hunks 中提取完整文件内容 ──
 
@@ -197,8 +198,8 @@ export function DiffView(props: DiffViewProps) {
       setFileChanged(false);
       // 异步触发语法高亮
       highlightDiffContent(r, leftPath(), rightPath());
-      // 自动监视文件变更
-      watch([leftPath(), rightPath()]);
+      // 自动监视文件变更（根据用户设置）
+      getSettings().then((s) => { if (s.watch_files) watch([leftPath(), rightPath()]); });
       // 写入历史记录
       recordHistory(r);
     } catch (e) {

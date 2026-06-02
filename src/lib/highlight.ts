@@ -111,29 +111,6 @@ export async function highlightFile(
   }
 }
 
-/**
- * Highlight a single line of code (best-effort without full file context).
- */
-export async function highlightLine(
-  code: string,
-  lang: string,
-): Promise<string> {
-  try {
-    const hl = await getHighlighter();
-    const html = hl.codeToHtml(code, { lang, theme: "github-dark" });
-
-    const lineMatch = /<span class="line">(.*?)<\/span>/s.exec(html);
-    if (lineMatch) return lineMatch[1];
-    // Fallback: strip pre/code tags
-    return html
-      .replace(/<\/?pre[^>]*>/g, "")
-      .replace(/<\/?code[^>]*>/g, "")
-      .trim();
-  } catch {
-    return escapeHtml(code);
-  }
-}
-
 export function escapeHtml(text: string): string {
   return text
     .replace(/&/g, "&amp;")
