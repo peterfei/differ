@@ -93,12 +93,17 @@ jobs:
 
       # ── 构建：Tauri 自动处理签名（有 APPLE_SIGNING_IDENTITY 则签，否则跳过）──
       - name: Build Tauri app
-        run: npx tauri build --target ${{ matrix.target }}
+        run: |
+          # 如果 signing identity 为空，unset 它让 Tauri 回退到 config 的 null（跳过签名）
+          if [ -z "$APPLE_SIGNING_IDENTITY" ]; then
+            unset APPLE_SIGNING_IDENTITY
+          fi
+          npx tauri build --target ${{ matrix.target }}
         env:
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY || '' }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID || '' }}
-          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY || '' }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER || '' }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
 
       - name: Clean up keychain (macOS)
         if: matrix.os == 'macos-latest' && env.APPLE_CERTIFICATE != ''
