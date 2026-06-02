@@ -1,0 +1,55 @@
+#!/bin/bash
+# macOS 代码签名与公证设置指南
+# 使用方式:
+#   1. 从 Apple Developer Portal 导出证书为 .p12 文件
+#   2. 将 .p12 转为 base64:  base64 -i Certificates.p12 | pbcopy
+#   3. 设置 GitHub Secrets（见下方说明）
+#   4. 推送标签触发 Release workflow
+
+set -euo pipefail
+
+echo "════════════════════════════════════════════"
+echo "  Differ — macOS 签名与公证设置指南"
+echo "════════════════════════════════════════════"
+echo ""
+echo "=== 前置条件 ==="
+echo "1. Apple Developer 账号（$99/年）"
+echo "2. 已创建 Developer ID Application 证书"
+echo "3. 已创建 App Store Connect API Key"
+echo ""
+echo "=== 导出证书 ==="
+echo "1. 打开 钥匙串访问 → 登录 → 证书"
+echo "2. 找到 \"Developer ID Application: Your Name (TEAMID)\""
+echo "3. 右键导出为 .p12（会要求设置密码）"
+echo "4. 转换为 base64:"
+echo "   base64 -i Certificates.p12 | pbcopy"
+echo ""
+echo "=== GitHub Secrets（必须在 repo Settings→Secrets 中设置）==="
+echo ""
+echo "APPLE_CERTIFICATE           # base64 编码的 .p12 证书文件"
+echo "APPLE_CERTIFICATE_PASSWORD  # .p12 导出时设置的密码"
+echo "APPLE_SIGNING_IDENTITY      # 证书名称，例如:"
+echo "                            # \"Developer ID Application: Your Name (TEAMID)\""
+echo "APPLE_TEAM_ID               # Apple Team ID (10 位字符)"
+echo ""
+echo "=== App Store Connect API Key（用于公证）==="
+echo "1. 访问 https://appstoreconnect.apple.com/access/api"
+echo "2. 创建新 Key，权限选择 \"Developer\""
+echo "3. 下载 .p8 文件（仅一次下载机会）"
+echo "4. 复制 Issuer ID 和 Key ID"
+echo ""
+echo "APPLE_API_KEY               # .p8 文件的完整内容（包括 -----BEGIN/END 行）"
+echo "APPLE_API_ISSUER            # Issuer ID (UUID 格式)"
+echo ""
+echo "=== 本地测试签名 ==="
+echo "# 手动签名验证："
+echo "codesign -dvvv path/to/Differ.app"
+echo ""
+echo "# 验证公证状态："
+echo "xcrun stapler validate path/to/Differ.app"
+echo ""
+echo "=== 触发 Release ==="
+echo "git tag v0.1.0"
+echo "git push origin v0.1.0"
+echo ""
+echo "════════════════════════════════════════════"
