@@ -212,11 +212,7 @@ fn build_tree(flat: &[DirectoryEntry]) -> Vec<DirectoryEntry> {
 }
 
 fn parent_dir(path: &str) -> Option<String> {
-    if let Some(idx) = path.rfind('/') {
-        Some(path[..idx].to_string())
-    } else {
-        None
-    }
+    path.rfind('/').map(|idx| path[..idx].to_string())
 }
 
 fn gather_children(flat: &[DirectoryEntry], parent: &str) -> Vec<DirectoryEntry> {
