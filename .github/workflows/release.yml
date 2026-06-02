@@ -119,7 +119,7 @@ jobs:
         with:
           name: differ-${{ matrix.target }}
           path: |
-            src-tauri/target/release/bundle/dmg/*.dmg
+            src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
           if-no-files-found: warn
 
       - name: Upload bundle (Linux)
@@ -128,8 +128,8 @@ jobs:
         with:
           name: differ-${{ matrix.target }}
           path: |
-            src-tauri/target/release/bundle/deb/*.deb
-            src-tauri/target/release/bundle/appimage/*.AppImage
+            src-tauri/target/${{ matrix.target }}/release/bundle/deb/*.deb
+            src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage
           if-no-files-found: warn
 
   # ── 创建 Release ──
