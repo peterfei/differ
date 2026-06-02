@@ -74,9 +74,9 @@ pub fn three_way_merge(base: &str, left: &str, right: &str) -> MergeResult {
             let ins_l = ol.filter(|o| o.old_range().is_empty() && o.old_range().start == base_pos);
             let ins_r = or.filter(|o| o.old_range().is_empty() && o.old_range().start == base_pos);
 
-            if ins_l.is_some() && ins_r.is_some() {
-                let left_new = get_new_lines(ins_l.unwrap(), &diff_l);
-                let right_new = get_new_lines(ins_r.unwrap(), &diff_r);
+            if let (Some(ins_l), Some(ins_r)) = (ins_l, ins_r) {
+                let left_new = get_new_lines(ins_l, &diff_l);
+                let right_new = get_new_lines(ins_r, &diff_r);
                 if left_new == right_new {
                     for line in &left_new {
                         result.push(line.clone());
@@ -95,16 +95,16 @@ pub fn three_way_merge(base: &str, left: &str, right: &str) -> MergeResult {
                 had_insertions = true;
                 continue;
             }
-            if ins_l.is_some() {
-                for line in get_new_lines(ins_l.unwrap(), &diff_l) {
+            if let Some(ins_l) = ins_l {
+                for line in get_new_lines(ins_l, &diff_l) {
                     result.push(line.clone());
                 }
                 i += 1;
                 had_insertions = true;
                 continue;
             }
-            if ins_r.is_some() {
-                for line in get_new_lines(ins_r.unwrap(), &diff_r) {
+            if let Some(ins_r) = ins_r {
+                for line in get_new_lines(ins_r, &diff_r) {
                     result.push(line.clone());
                 }
                 j += 1;
@@ -131,16 +131,16 @@ pub fn three_way_merge(base: &str, left: &str, right: &str) -> MergeResult {
 
         if base_pos >= base_lines.len() {
             // Past EOF — flush remaining insertions
-            for k in i..change_ops_l.len() {
-                if change_ops_l[k].old_range().is_empty() && !change_ops_l[k].new_range().is_empty() {
-                    for line in get_new_lines(change_ops_l[k], &diff_l) {
+            for op in change_ops_l[i..].iter() {
+                if op.old_range().is_empty() && !op.new_range().is_empty() {
+                    for line in get_new_lines(op, &diff_l) {
                         result.push(line);
                     }
                 }
             }
-            for k in j..change_ops_r.len() {
-                if change_ops_r[k].old_range().is_empty() && !change_ops_r[k].new_range().is_empty() {
-                    for line in get_new_lines(change_ops_r[k], &diff_r) {
+            for op in change_ops_r[j..].iter() {
+                if op.old_range().is_empty() && !op.new_range().is_empty() {
+                    for line in get_new_lines(op, &diff_r) {
                         result.push(line);
                     }
                 }

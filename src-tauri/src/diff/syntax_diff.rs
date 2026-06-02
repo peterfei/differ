@@ -98,10 +98,6 @@ langs! {
 
 // ── Line-to-AST mapping type ──
 
-/// For each line (1-based), the list of significant AST nodes containing it.
-/// Inner vec is ordered outermost → innermost.
-type LineMapping = Vec<Vec</* kind */ String>>;
-
 /// Record of a significant AST node for hunk anchor tracking.
 #[derive(Debug, Clone)]
 struct NodeAnchor {
@@ -160,28 +156,6 @@ fn build_anchors(root: tree_sitter::Node, source: &[u8], sig_kinds: &[&str]) -> 
     anchors
 }
 
-/// Build a mapping from source lines to containing significant AST nodes.
-/// only scans node kinds in `sig_kinds`.
-fn build_line_mapping(
-    root: tree_sitter::Node,
-    line_count: usize,
-    sig_kinds: &[&str],
-) -> LineMapping {
-    let mut anchors: Vec<NodeAnchor> = Vec::new();
-    collect_anchors(root, sig_kinds, &mut anchors, b"");
-
-    // One entry per line (1-based), plus index 0 unused
-    let mut result: LineMapping = vec![Vec::new(); line_count + 1];
-
-    for anchor in &anchors {
-        for line in anchor.start_line..=anchor.end_line.min(line_count) {
-            result[line].push(anchor.kind.clone());
-        }
-    }
-
-    result
-}
-
 /// Recursively walk tree-sitter AST and collect NodeAnchors for significant kinds.
 fn collect_anchors<'a>(
     node: tree_sitter::Node<'a>,
@@ -215,6 +189,7 @@ fn collect_anchors<'a>(
 }
 
 /// Find the narrowest significant node (by end_line offset) that contains all given lines.
+#[cfg(test)]
 fn find_containing_anchor(
     anchors: &[NodeAnchor],
     lines: &[usize],
@@ -244,6 +219,7 @@ fn find_containing_anchor(
 ///
 /// This handles the case where `similar` merges changes across function
 /// boundaries into a single hunk — we split it back apart by AST anchors.
+#[allow(clippy::type_complexity)]
 fn regroup_hunks(
     hunks: Vec<DiffHunk>,
     left_anchors: &[NodeAnchor],
@@ -269,7 +245,7 @@ fn regroup_hunks(
 
     // ── Helper: find containing anchor by line number ──
 
-    fn find_anchor_by_line<'a>(line: usize, anchors: &'a [NodeAnchor]) -> Option<&'a NodeAnchor> {
+    fn find_anchor_by_line(line: usize, anchors: &[NodeAnchor]) -> Option<&NodeAnchor> {
         anchors
             .iter()
             .filter(|a| a.start_line <= line && a.end_line >= line)
@@ -297,7 +273,7 @@ fn regroup_hunks(
                 .or_else(|| change.old_line_no.and_then(|l| find_anchor_by_line(l, left_anchors)))
         };
 
-        let key: Option<(String, String)> = anchor.map(|a| anchor_identity(a));
+        let key: Option<(String, String)> = anchor.map(anchor_identity);
 
         // Start new group if anchor identity differs from last group
         let same_group = grouped.last()

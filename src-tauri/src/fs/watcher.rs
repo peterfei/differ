@@ -4,16 +4,9 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Emitter};
 
 /// Holds an optional file watcher, guarded by a Mutex for thread safety.
+#[derive(Default)]
 pub struct WatcherState {
     pub inner: Mutex<Option<RecommendedWatcher>>,
-}
-
-impl WatcherState {
-    pub fn new() -> Self {
-        Self {
-            inner: Mutex::new(None),
-        }
-    }
 }
 
 /// Start watching a list of files. Emits `file-changed` events on modification.
