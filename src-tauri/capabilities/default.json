@@ -10,6 +10,7 @@
     "core:window:allow-set-title",
     "core:window:allow-set-size",
     "dialog:default",
-    "dialog:allow-open"
+    "dialog:allow-open",
+    "store:default"
   ]
 }

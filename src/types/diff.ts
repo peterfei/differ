@@ -40,3 +40,23 @@ export interface DiffResult {
   right_lines: number;
   options: DiffOptions;
 }
+
+// ── 目录对比 ──
+
+export type EntryStatus = "Added" | "Removed" | "Modified" | "Same";
+
+export interface DirectoryEntry {
+  path: string;
+  status: EntryStatus;
+  is_dir: boolean;
+  children?: DirectoryEntry[];
+}
+
+export interface DirectoryDiffResult {
+  entries: DirectoryEntry[];
+  left_total: number;
+  right_total: number;
+  added: number;
+  removed: number;
+  modified: number;
+}
