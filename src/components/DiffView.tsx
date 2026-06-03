@@ -25,6 +25,16 @@ function reconstructText(hunks: DiffHunk[], side: "left" | "right"): string {
 
 interface DiffViewProps {
   onOpenMergeView?: (base: string, left: string, right: string) => void;
+  /** 外部传入的 diff 结果（Git 集成模式） */
+  externalDiff?: DiffResult | null;
+  /** 外部 diff 的上下文信息 */
+  externalContext?: {
+    label: string;
+    branch?: string;
+    commit?: string;
+  };
+  /** 关闭外部 diff（返回 Git 视图） */
+  onCloseExternal?: () => void;
 }
 
 export function DiffView(props: DiffViewProps) {
@@ -47,8 +57,15 @@ export function DiffView(props: DiffViewProps) {
 
   let unlisten: UnlistenFn | undefined;
 
+  // 如果是外部 diff 模式，直接使用传入的结果
+  const displayResult = createMemo(() => props.externalDiff ?? result());
+
+  // 外部模式不监听文件变更
+  const isExternalMode = () => props.externalDiff !== undefined;
+
   // 监听外部传入的路径变化（从目录对比导航过来时触发）
   createEffect(() => {
+    if (isExternalMode()) return; // 外部模式不监听导航路径
     const paths = navDiffPaths();
     if (paths) {
       setLeftPath(paths.left);
@@ -60,6 +77,8 @@ export function DiffView(props: DiffViewProps) {
   });
 
   onMount(async () => {
+    // 外部模式不监听文件变更
+    if (isExternalMode()) return;
     // Listen for file change events from the Rust backend
     const { listen } = await import("@tauri-apps/api/event");
     const un = await listen<string>("file-changed", (event) => {
@@ -100,18 +119,18 @@ export function DiffView(props: DiffViewProps) {
     await runDiff();
   }
 
-  const totalHunks = createMemo(() => result()?.hunks.length ?? 0);
+  const totalHunks = createMemo(() => displayResult()?.hunks.length ?? 0);
 
   const totalAdds = createMemo(
     () =>
-      result()
+      displayResult()
         ?.hunks.flatMap((h) => h.changes)
         .filter((c) => c.change_type === "Add").length ?? 0
   );
 
   const totalDels = createMemo(
     () =>
-      result()
+      displayResult()
         ?.hunks.flatMap((h) => h.changes)
         .filter((c) => c.change_type === "Delete").length ?? 0
   );
@@ -140,7 +159,7 @@ export function DiffView(props: DiffViewProps) {
     // Enter in go-to-line: 跳转
     if (e.key === "Enter" && goToLine()) {
       const line = parseInt(targetLine());
-      if (!isNaN(line) && line > 0 && result()) {
+      if (!isNaN(line) && line > 0 && displayResult()) {
         jumpToLine(line);
       }
       setGoToLine(false);
@@ -155,7 +174,7 @@ export function DiffView(props: DiffViewProps) {
   }
 
   function jumpToLine(line: number) {
-    const r = result();
+    const r = displayResult();
     if (!r) return;
     for (let i = 0; i < r.hunks.length; i++) {
       const hunk = r.hunks[i];
@@ -266,15 +285,39 @@ export function DiffView(props: DiffViewProps) {
       <div class="flex-shrink-0 bg-slate-900/60 border-b border-slate-800/50 px-4 py-2">
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-3">
-            <button
-              onClick={openFiles}
-              class="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-lg transition-colors shadow-lg shadow-indigo-600/20"
-            >
-              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-              </svg>
-              打开文件
-            </button>
+            <Show when={!isExternalMode()}>
+              <button
+                onClick={openFiles}
+                class="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-lg transition-colors shadow-lg shadow-indigo-600/20"
+              >
+                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                </svg>
+                打开文件
+              </button>
+            </Show>
+            <Show when={isExternalMode() && props.externalContext}>
+              <div class="flex items-center gap-1.5 text-xs">
+                <button
+                  onClick={() => props.onCloseExternal?.()}
+                  class="p-1 text-slate-500 hover:text-slate-300 transition-colors"
+                  title="返回 Git 视图"
+                >
+                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                  </svg>
+                </button>
+                <span class="text-slate-400 font-medium">{props.externalContext!.label}</span>
+                <Show when={props.externalContext!.branch}>
+                  <span class="text-[10px] text-indigo-400 bg-indigo-500/10 px-1.5 py-0.5 rounded font-mono">
+                    {props.externalContext!.branch}
+                  </span>
+                </Show>
+                <Show when={props.externalContext!.commit}>
+                  <span class="text-[10px] text-slate-500 font-mono">{props.externalContext!.commit}</span>
+                </Show>
+              </div>
+            </Show>
             <Show when={leftPath()}>
               <div class="flex items-center gap-1.5 text-xs">
                 <FileBadge path={leftPath()} />
@@ -295,7 +338,7 @@ export function DiffView(props: DiffViewProps) {
               三路合并
             </button>
           </Show>
-          <Show when={result()}>
+          <Show when={displayResult()}>
             <div class="flex items-center gap-2">
               <div class="flex items-center gap-1">
                 <span class="flex items-center gap-1 text-[10px] text-emerald-400">
@@ -326,7 +369,8 @@ export function DiffView(props: DiffViewProps) {
                   </svg>
                 </button>
               </div>
-              {/* Algorithm selector */}
+              {/* Algorithm selector - hide in external/Git mode */}
+              <Show when={!isExternalMode()}>
               <div class="flex items-center gap-1 bg-slate-800/60 rounded-lg p-0.5 border border-slate-700/30">
                 <button
                   class={`px-2 py-1 text-[10px] font-medium rounded-md transition-colors ${algorithm() === "Myers" ? "text-indigo-300 bg-indigo-500/15" : "text-slate-500 hover:text-slate-300"}`}
@@ -341,7 +385,7 @@ export function DiffView(props: DiffViewProps) {
                   Patience
                 </button>
               </div>
-              {/* Syntax-aware toggle */}
+              {/* Syntax-aware toggle - hide in external/Git mode */}
               <div class="flex items-center bg-slate-800/60 rounded-lg p-0.5 border border-slate-700/30">
                 <button
                   class={`px-2 py-1 text-[10px] font-medium rounded-md transition-colors ${!useSyntax() ? "text-indigo-300 bg-indigo-500/15" : "text-slate-500 hover:text-slate-300"}`}
@@ -356,6 +400,7 @@ export function DiffView(props: DiffViewProps) {
                   语法
                 </button>
               </div>
+              </Show>
             </div>
           </Show>
         </div>
@@ -371,8 +416,8 @@ export function DiffView(props: DiffViewProps) {
         </div>
       </Show>
 
-      {/* File change notification */}
-      <Show when={fileChanged()}>
+      {/* File change notification - hidden in external mode */}
+      <Show when={!isExternalMode() && fileChanged()}>
         <div class="flex-shrink-0 bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 flex items-center justify-between">
           <div class="flex items-center gap-2">
             <svg class="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -392,9 +437,20 @@ export function DiffView(props: DiffViewProps) {
       {/* Diff Content */}
       <div class="flex-1 overflow-hidden relative" onClick={() => !goToLine() && document.querySelector('[tabIndex="-1"]')?.focus()}>
         <Show
-          when={result()}
+          when={displayResult()}
           fallback={
-            <DropZone onDrop={(l, r) => { setLeftPath(l); setRightPath(r); }} onRun={() => { if (leftPath() && rightPath()) runDiff(); }} />
+            <Show when={!isExternalMode()} fallback={
+              <div class="flex-1 flex items-center justify-center">
+                <div class="text-center">
+                  <svg class="w-10 h-10 mx-auto mb-3 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m5.231 13.481L15 17.25m-4.5-15H5.625c-.621 0-1.125.504-1.125 1.125v16.5c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9zm3.75 11.625a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
+                  </svg>
+                  <p class="text-xs text-slate-500">选择一个文件查看差异</p>
+                </div>
+              </div>
+            }>
+              <DropZone onDrop={(l, r) => { setLeftPath(l); setRightPath(r); }} onRun={() => { if (leftPath() && rightPath()) runDiff(); }} />
+            </Show>
           }
         >
           {(r) =>
@@ -433,7 +489,7 @@ export function DiffView(props: DiffViewProps) {
       </div>
 
       {/* Bottom status bar */}
-      <Show when={result()}>
+      <Show when={displayResult()}>
         <div class="flex-shrink-0 h-9 bg-slate-900/60 border-t border-slate-800/50 flex items-center justify-between px-4">
           <div class="flex items-center gap-3">
             <div class="flex items-center gap-2">
@@ -459,8 +515,10 @@ export function DiffView(props: DiffViewProps) {
             <span>J/K: 导航</span>
             <span>Ctrl+G: 跳转</span>
             <span>Ctrl+D: 切换视图</span>
-            <span>算法: {algorithm()}</span>
-            <span>模式: {useSyntax() ? '语法' : '行级'}</span>
+            <Show when={!isExternalMode()}>
+              <span>算法: {algorithm()}</span>
+              <span>模式: {useSyntax() ? '语法' : '行级'}</span>
+            </Show>
           </div>
         </div>
       </Show>
