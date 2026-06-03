@@ -36,8 +36,8 @@ fn expand_tilde(path: &str) -> String {
 /// `Repository::discover()` (walks up directories looking for `.git`).
 /// Discovery results are cached to avoid repeated filesystem walks.
 pub fn open_repo(path: &str) -> Result<Repository, GitError> {
-    // Expand ~ to home directory
-    let path = expand_tilde(path);
+    // Expand ~ to home directory and normalize trailing slash
+    let path = expand_tilde(path).trim_end_matches('/').to_string();
 
     // Try exact path first
     if let Ok(repo) = Repository::open(&path) {
@@ -104,7 +104,7 @@ pub fn get_repo_info(repo: &Repository) -> Result<GitRepoInfo, GitError> {
         path: repo.path().to_string_lossy().to_string(),
         work_dir: repo
             .workdir()
-            .map(|p| p.to_string_lossy().to_string())
+            .map(|p| p.to_string_lossy().trim_end_matches('/').to_string())
             .unwrap_or_default(),
         current_branch: head
             .as_ref()

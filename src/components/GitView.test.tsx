@@ -4,14 +4,24 @@ import { GitView } from './GitView';
 import type { GitRepoInfo, GitStatusEntry, GitCommit, GitBranch } from '../types/git';
 import type { DiffResult } from '../types/diff';
 
-const { mockInvoke } = vi.hoisted(() => ({
+const { mockInvoke, mockOnDragDropEvent } = vi.hoisted(() => ({
   mockInvoke: vi.fn<(cmd: string, args?: unknown) => Promise<unknown>>(),
+  mockOnDragDropEvent: vi.fn<(callback: (event: unknown) => void) => Promise<() => void>>()
+    .mockResolvedValue(vi.fn()),
 }));
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: mockInvoke }));
 
+// Mock Tauri drag-drop event API — use shared mock for callback capture
+vi.mock('@tauri-apps/api/webview', () => ({
+  getCurrentWebview: vi.fn(() => ({
+    onDragDropEvent: mockOnDragDropEvent,
+  })),
+}));
+
 beforeEach(() => {
   vi.clearAllMocks();
+  localStorage.clear();
 });
 
 const mockRepoInfo: GitRepoInfo = {
@@ -174,6 +184,96 @@ describe('GitView', () => {
     await vi.waitFor(() => {
       expect(screen.getByText('src/main.rs')).toBeInTheDocument();
     });
+  });
+
+  it('saves repo work_dir to recent repos on successful open', async () => {
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === 'git_open') return mockRepoInfo;
+      if (cmd === 'git_status') return [];
+      if (cmd === 'git_log') return [];
+      if (cmd === 'git_branches') return [];
+      return null;
+    });
+
+    render(() => <GitView />);
+
+    fireEvent.input(screen.getByPlaceholderText('输入仓库路径...'), { target: { value: '/repo' } });
+    fireEvent.click(screen.getByText('打开仓库'));
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('文件状态')).toBeInTheDocument();
+    });
+
+    // Go back to repo selection
+    fireEvent.click(screen.getByTitle('返回'));
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('/repo')).toBeInTheDocument();
+    });
+  });
+
+  it('shows recent repos list in selection view', () => {
+    localStorage.setItem('differ_recent_repos', JSON.stringify(['/recent1', '/recent2']));
+
+    render(() => <GitView />);
+
+    expect(screen.getByText('最近仓库')).toBeInTheDocument();
+    expect(screen.getByText('/recent1')).toBeInTheDocument();
+    expect(screen.getByText('/recent2')).toBeInTheDocument();
+  });
+
+  it('opens a recent repo when clicked', async () => {
+    localStorage.setItem('differ_recent_repos', JSON.stringify(['/recent/path']));
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === 'git_open') return { ...mockRepoInfo, work_dir: '/recent/path' };
+      if (cmd === 'git_status') return mockStatus;
+      if (cmd === 'git_log') return mockCommits;
+      if (cmd === 'git_branches') return mockBranches;
+      return null;
+    });
+
+    render(() => <GitView />);
+
+    fireEvent.click(screen.getByText('/recent/path'));
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('src/main.rs')).toBeInTheDocument();
+    });
+  });
+
+  it('handles Tauri drag-drop event to discover and open repo', async () => {
+    render(() => <GitView />);
+
+    // Wait for onMount to register the Tauri drag-drop listener
+    await vi.waitFor(() => {
+      expect(mockOnDragDropEvent).toHaveBeenCalled();
+    });
+
+    // Capture the registered callback
+    const callback = mockOnDragDropEvent.mock.calls[0][0];
+
+    // Simulate drag over
+    callback({ payload: { type: 'over', paths: ['/some/path'] } });
+
+    // Set up mock for discover + open flow
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === 'git_discover') return '/discovered/repo';
+      if (cmd === 'git_open') return { ...mockRepoInfo, work_dir: '/discovered/repo' };
+      if (cmd === 'git_status') return mockStatus;
+      if (cmd === 'git_log') return mockCommits;
+      if (cmd === 'git_branches') return mockBranches;
+      return null;
+    });
+
+    // Simulate drop
+    callback({ payload: { type: 'drop', paths: ['/some/path'] } });
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('src/main.rs')).toBeInTheDocument();
+    });
+
+    // Verify git_discover was called
+    expect(mockInvoke).toHaveBeenCalledWith('git_discover', { path: '/some/path' });
   });
 
   it('allows returning to repo selection', async () => {

@@ -770,6 +770,7 @@ function InlineDiffRenderer(props: { text: string; inlines: { start: number; end
 function DropZone(props: { onDrop: (left: string, right: string) => void; onRun: () => void }) {
   async function onDrop(e: DragEvent) {
     e.preventDefault();
+    e.stopPropagation();
     const files = Array.from(e.dataTransfer?.files ?? []);
     if (files.length >= 2) {
       props.onDrop(files[0].path, files[1].path);

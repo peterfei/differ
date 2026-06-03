@@ -56,6 +56,11 @@ pub async fn git_close(repo_path: String) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+pub async fn git_discover(path: String) -> Result<String, String> {
+    git::repo::discover_repo(&path).map_err(|e| e.to_string())
+}
+
 // ── Macro-generated commands ──
 // 9 commands ≡ 9 lines. The macro generates the remaining ~54 lines.
 
