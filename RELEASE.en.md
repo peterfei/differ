@@ -73,4 +73,7 @@
 - **Frontend**: SolidJS + TypeScript + Tailwind CSS + Vite
 - **Backend**: Rust + Tauri v2
 - **Diff Engine**: `similar` crate (line-level), tree-sitter 0.24 (syntax)
-- **Build**: macOS .app bundle + .dmg installer
+- **Install**:
+  - macOS: `brew tap peterfei/homebrew-differ && brew install --cask differ`
+  - Windows: `winget install peterfei.Differ` (pending merge)
+  - Direct download: macOS .dmg / Windows .msi & .exe / Linux .deb & .AppImage

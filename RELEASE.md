@@ -73,4 +73,7 @@
 - **前端**：SolidJS + TypeScript + Tailwind CSS + Vite
 - **后端**：Rust + Tauri v2
 - **Diff 引擎**：`similar` crate（行级），tree-sitter 0.24（语法）
-- **构建**：macOS .dmg / Windows .msi / Linux .deb + .AppImage
+- **安装**：
+  - macOS: `brew tap peterfei/homebrew-differ && brew install --cask differ`
+  - Windows: `winget install peterfei.Differ`（待合并）
+  - 直接下载：macOS .dmg / Windows .msi & .exe / Linux .deb & .AppImage
