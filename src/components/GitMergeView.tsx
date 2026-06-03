@@ -95,6 +95,7 @@ export function GitMergeView(props: GitMergeViewProps) {
   function smartMerge() {
     const d = data();
     if (!d) return;
+    setSaving(true);
     setSelectedConflictIdx(0);
     setResolvedConflicts(new Set<number>());
     setEditing(false);
@@ -109,6 +110,9 @@ export function GitMergeView(props: GitMergeViewProps) {
       })
       .catch((e) => {
         console.error("smartMerge failed:", e);
+      })
+      .finally(() => {
+        setSaving(false);
       });
   }
 
@@ -406,7 +410,7 @@ function renderMergeUI(
               <div class="w-px h-4 bg-slate-700/40 mx-0.5" />
               <button onClick={() => adoptSide("left")} disabled={resolvedConflicts().has(currentIdx)} class="px-2 py-0.5 text-[10px] font-medium text-emerald-400 bg-emerald-500/10 rounded-md hover:bg-emerald-500/20 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">采用左侧</button>
               <button onClick={() => adoptSide("right")} disabled={resolvedConflicts().has(currentIdx)} class="px-2 py-0.5 text-[10px] font-medium text-red-400 bg-red-500/10 rounded-md hover:bg-red-500/20 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">采用右侧</button>
-              <button onClick={smartMerge} class="px-2 py-0.5 text-[10px] font-medium text-indigo-400 bg-indigo-500/10 rounded-md hover:bg-indigo-500/20 transition-colors">智能合并</button>
+              <button onClick={smartMerge} disabled={isSaving()} class="px-2 py-0.5 text-[10px] font-medium text-indigo-400 bg-indigo-500/10 rounded-md hover:bg-indigo-500/20 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">智能合并</button>
               <button onClick={editing() ? finishEditing : startEditing} class="px-2 py-0.5 text-[10px] font-medium text-slate-400 bg-slate-800/60 rounded-md hover:bg-slate-700/60 transition-colors">{editing() ? "完成编辑" : "手动编辑"}</button>
             </div>
           </div>

@@ -207,3 +207,59 @@ describe("GitMergeView high-fidelity async flow", () => {
     },
   );
 });
+
+describe("GitMergeView adoptSide + smartMerge flow", () => {
+  beforeEach(() => {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === "git_get_conflict_content") return Promise.resolve(MOCK_CONFLICT_CONTENT);
+      if (cmd === "merge_text") return Promise.resolve(MOCK_MERGE_RESULT);
+      return Promise.reject(new Error(`Unknown command: ${cmd}`));
+    });
+  });
+
+  afterEach(() => {
+    mockInvoke.mockImplementation(() => new Promise(() => {}));
+  });
+
+  it(
+    "adoptSide and smartMerge both update merge result text",
+    { timeout: 10000 },
+    async () => {
+      render(() => (
+        <GitMergeView
+          repoPath="/tmp/test-repo"
+          filePath="app.py"
+          onBack={() => {}}
+        />
+      ));
+
+      // Wait for loading to finish
+      await waitFor(
+        () => {
+          expect(screen.queryByText("加载合并冲突...")).not.toBeInTheDocument();
+        },
+        { timeout: 5000 },
+      );
+
+      // Step 1: Initial merge result has 2 "<<<<<<< Left" markers
+      const conflictMarkers = () => screen.getAllByText("<<<<<<< Left");
+      expect(conflictMarkers()).toHaveLength(2);
+
+      // Step 2: Click "采用左侧" to resolve first conflict
+      screen.getByText("采用左侧").click();
+
+      // After adoptSide, only 1 "<<<<<<< Left" marker remains (second conflict)
+      await vi.waitFor(() => {
+        expect(screen.getAllByText("<<<<<<< Left")).toHaveLength(1);
+      }, { timeout: 3000 });
+
+      // Step 3: Click "智能合并" to restore original merge from backend
+      screen.getByText("智能合并").click();
+
+      // After smartMerge, all 2 "<<<<<<< Left" markers should be back
+      await vi.waitFor(() => {
+        expect(screen.getAllByText("<<<<<<< Left")).toHaveLength(2);
+      }, { timeout: 3000 });
+    },
+  );
+});
