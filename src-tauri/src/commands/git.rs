@@ -1,5 +1,6 @@
 use crate::diff::text_diff::{DiffOptions, DiffResult};
 use crate::git;
+use crate::git::diff::ConflictContent;
 
 // ═══════════════════════════════════════════════════════════════════════
 // git_cmd! — Declarative Tauri command generator
@@ -109,6 +110,16 @@ git_cmd!(
 git_cmd!(
     git_diff_conflict(path: String, options: Option<DiffOptions>)
     => git::diff::diff_conflict => DiffResult
+);
+
+git_cmd!(
+    git_get_conflict_content(path: String)
+    => git::diff::get_conflict_content => ConflictContent
+);
+
+git_cmd!(
+    git_resolve_conflict(path: String, content: String)
+    => git::diff::resolve_conflict => ()
 );
 
 // ── Tests ──

@@ -6,11 +6,12 @@ import { HistoryView } from './components/HistoryView';
 import { SettingsView } from './components/SettingsView';
 import { DirectoryDiffView } from './components/DirectoryDiffView';
 import { MergeView } from './components/MergeView';
+import { GitMergeView } from './components/GitMergeView';
 import { GitView } from './components/GitView';
 import { getSettings } from './lib/settings';
-import { setDiffPaths, setMergePaths, setPendingRepoPath } from './lib/navStore';
+import { gitConflictContext, setDiffPaths, setMergePaths, setGitConflictContext, setPendingRepoPath } from './lib/navStore';
 
-type View = 'dashboard' | 'diff' | 'merge' | 'history' | 'git' | 'settings';
+type View = 'dashboard' | 'diff' | 'merge' | 'history' | 'git' | 'settings' | 'git-merge';
 type DiffMode = 'file' | 'directory';
 
 function App() {
@@ -50,6 +51,11 @@ function App() {
   function openMergeView(base: string, left: string, right: string) {
     setMergePaths({ base, left, right });
     setCurrentView('merge');
+  }
+
+  function openGitMergeView(repoPath: string, filePath: string) {
+    setGitConflictContext({ repoPath, filePath });
+    setCurrentView('git-merge');
   }
 
   function openDirectoryDiff() {
@@ -112,13 +118,20 @@ function App() {
         </div>
 
         {currentView() === 'merge' && <MergeView />}
+        {currentView() === 'git-merge' && (
+          <GitMergeView
+            repoPath={gitConflictContext()!.repoPath}
+            filePath={gitConflictContext()!.filePath}
+            onBack={() => { setGitConflictContext(null); setCurrentView('git'); }}
+          />
+        )}
         {currentView() === 'history' && <HistoryView onNavigate={(view) => {
             if (view === 'diff') { setDiffMode('file'); setCurrentView('diff'); }
             else if (view === 'directory') { setDiffMode('directory'); setCurrentView('diff'); }
             else if (view === 'merge') setCurrentView('merge');
           }} />}
         {currentView() === 'settings' && <SettingsView />}
-        {currentView() === 'git' && <GitView />}
+        {currentView() === 'git' && <GitView onOpenGitMergeView={openGitMergeView} />}
       </main>
     </div>
   );

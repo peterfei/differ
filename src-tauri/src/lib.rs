@@ -35,6 +35,8 @@ pub fn run() {
             commands::git::git_diff_working,
             commands::git::git_diff_syntax,
             commands::git::git_diff_conflict,
+            commands::git::git_get_conflict_content,
+            commands::git::git_resolve_conflict,
             commands::git::git_discover,
         ])
         .run(tauri::generate_context!())
