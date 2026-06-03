@@ -95,6 +95,7 @@ jobs:
 
       # ── 构建：Tauri 自动处理签名（有 APPLE_SIGNING_IDENTITY 则签，否则跳过）──
       - name: Build Tauri app
+        shell: bash
         run: |
           # 如果 signing identity 为空，unset 它让 Tauri 回退到 config 的 null（跳过签名）
           if [ -z "$APPLE_SIGNING_IDENTITY" ]; then
