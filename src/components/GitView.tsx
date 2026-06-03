@@ -1,5 +1,6 @@
 import { createSignal, Show, For, onMount, onCleanup } from "solid-js";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { invoke } from "@tauri-apps/api/core";
 import type { GitRepoInfo, GitStatusEntry, GitCommit, GitBranch } from "../types/git";
 import type { DiffResult, DiffChange } from "../types/diff";
 import { GitSidebar } from "./GitSidebar";
@@ -116,7 +117,6 @@ export function GitView(props: GitViewProps) {
     setError(null);
     setDataError(null);
     try {
-      const { invoke } = await import("@tauri-apps/api/core");
       console.warn("[GitView] git_open path:", path);
       const info = await invoke<GitRepoInfo>("git_open", { path });
       console.warn("[GitView] git_open OK, work_dir:", info.work_dir, "typeof:", typeof info.work_dir);
@@ -139,7 +139,6 @@ export function GitView(props: GitViewProps) {
 
   async function loadStatus(repoPathVal: string) {
     try {
-      const { invoke } = await import("@tauri-apps/api/core");
       console.warn("[GitView] calling git_status with repoPath:", repoPathVal);
       const entries = await invoke<GitStatusEntry[]>("git_status", { repoPath: repoPathVal });
       console.warn("[GitView] git_status returned", entries.length, "entries");
@@ -153,7 +152,6 @@ export function GitView(props: GitViewProps) {
   async function loadCommits(repoPathVal: string, page: number) {
     setLoadingCommits(true);
     try {
-      const { invoke } = await import("@tauri-apps/api/core");
       console.warn("[GitView] calling git_log with repoPath:", repoPathVal, "page:", page);
       const results = await invoke<GitCommit[]>("git_log", {
         repoPath: repoPathVal,
@@ -178,7 +176,6 @@ export function GitView(props: GitViewProps) {
 
   async function loadBranches(repoPathVal: string) {
     try {
-      const { invoke } = await import("@tauri-apps/api/core");
       console.warn("[GitView] calling git_branches with repoPath:", repoPathVal);
       const results = await invoke<GitBranch[]>("git_branches", {
         repoPath: repoPathVal,
@@ -201,13 +198,25 @@ export function GitView(props: GitViewProps) {
     setDiffLoading(true);
 
     try {
-      const { invoke } = await import("@tauri-apps/api/core");
-      const cmd = staged ? "git_diff_staged" : "git_diff_unstaged";
-      const result = await invoke<DiffResult>(cmd, {
-        repoPath: repo.work_dir,
-        path: path,
-        options: { algorithm: "Myers", context_lines: 3, ignore_whitespace: false, ignore_case: false },
-      });
+      // Check if this file is in conflicted state
+      const entry = statusEntries().find(e => e.path === path);
+      const isConflicted = entry?.status === "Conflicted";
+
+      let result: DiffResult;
+      if (isConflicted) {
+        result = await invoke<DiffResult>("git_diff_conflict", {
+          repoPath: repo.work_dir,
+          path: path,
+          options: { algorithm: "Myers", context_lines: 3, ignore_whitespace: false, ignore_case: false },
+        });
+      } else {
+        const cmd = staged ? "git_diff_staged" : "git_diff_unstaged";
+        result = await invoke<DiffResult>(cmd, {
+          repoPath: repo.work_dir,
+          path: path,
+          options: { algorithm: "Myers", context_lines: 3, ignore_whitespace: false, ignore_case: false },
+        });
+      }
       setSelectedDiff(result);
     } catch (e) {
       console.error("Failed to load diff:", e);
@@ -708,6 +717,11 @@ function DiffViewer(props: { diff: DiffResult; filePath: string; loading: boolea
       {/* Diff header */}
       <div class="flex-shrink-0 px-4 py-1.5 bg-slate-900/40 border-b border-slate-800/30 flex items-center gap-2">
         <span class="text-[11px] font-medium text-slate-400">{props.filePath}</span>
+        <Show when={props.diff.left_label && props.diff.right_label}>
+          <span class="text-[10px] text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded">
+            冲突: {props.diff.left_label} vs {props.diff.right_label}
+          </span>
+        </Show>
         <div class="flex items-center gap-1 ml-auto">
           <span class="flex items-center gap-1 text-[10px] text-emerald-400">
             <span class="w-1.5 h-1.5 rounded-full bg-emerald-500" />

@@ -416,6 +416,8 @@ pub fn enhance_with_syntax(
         left_lines: result.left_lines,
         right_lines: result.right_lines,
         options: result.options,
+        left_label: result.left_label,
+        right_label: result.right_label,
     }
 }
 
@@ -748,4 +750,232 @@ mod tests {
         assert_eq!(enhanced.hunks.len(), 2);
     }
 
+    // ── Missing coverage: TypeScript ──
+
+    #[test]
+    fn detect_typescript_from_cts() {
+        assert_eq!(detect_language("types.cts"), Some(Language::TypeScript));
+    }
+
+    #[test]
+    fn parse_valid_typescript() {
+        let code = "interface Point { x: number; y: number; }\n";
+        let tree = parse_text(code, Language::TypeScript).expect("should parse TypeScript");
+        assert_eq!(tree.root_node().kind(), "program");
+    }
+
+    #[test]
+    fn anchors_typescript_interface() {
+        let code = "interface Point {\n    x: number;\n    y: number;\n}\n";
+        let tree = parse_text(code, Language::TypeScript).unwrap();
+        let root = tree.root_node();
+        let kinds = Language::TypeScript.significant_kinds();
+        let mut anchors: Vec<NodeAnchor> = Vec::new();
+        collect_anchors(root, kinds, &mut anchors, code.as_bytes());
+        assert!(anchors.iter().any(|a| a.name.as_deref() == Some("Point")));
+    }
+
+    #[test]
+    fn anchors_typescript_type_alias() {
+        let code = "type Result<T> = Ok<T> | Err<T>;\n";
+        let tree = parse_text(code, Language::TypeScript).unwrap();
+        let root = tree.root_node();
+        let kinds = Language::TypeScript.significant_kinds();
+        let mut anchors: Vec<NodeAnchor> = Vec::new();
+        collect_anchors(root, kinds, &mut anchors, code.as_bytes());
+        assert!(anchors.iter().any(|a| a.name.as_deref() == Some("Result")));
+    }
+
+    #[test]
+    fn typescript_hunk_grouping() {
+        let left = "function foo() { return 1; }\nfunction bar() { return 2; }\n";
+        let right = "function foo() { return 10; }\nfunction bar() { return 20; }\n";
+
+        let result = text_diff(left, right, &DiffOptions::default());
+        let enhanced = enhance_with_syntax(result, left, right, Some(Language::TypeScript));
+
+        assert_eq!(enhanced.hunks.len(), 2);
+    }
+
+    // ── Missing coverage: anchor edge cases ──
+
+    #[test]
+    fn anchors_rust_impl_block() {
+        let code = "impl Foo {\n    fn bar() {}\n    fn baz() {}\n}\n";
+        let tree = parse_text(code, Language::Rust).unwrap();
+        let root = tree.root_node();
+        let kinds = Language::Rust.significant_kinds();
+        let mut anchors: Vec<NodeAnchor> = Vec::new();
+        collect_anchors(root, kinds, &mut anchors, code.as_bytes());
+        assert!(anchors.iter().any(|a| a.kind == "impl_item"));
+        // impl_item + 2 function_items (even though unnamed, still collected)
+        assert_eq!(anchors.len(), 3, "expected impl_item + 2 function_items, got {}: {:?}", anchors.len(), anchors.iter().map(|a| format!("{} {:?}", a.kind, a.name)).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn anchors_rust_trait_item() {
+        let code = "trait Draw {\n    fn draw(&self);\n}\n";
+        let tree = parse_text(code, Language::Rust).unwrap();
+        let root = tree.root_node();
+        let kinds = Language::Rust.significant_kinds();
+        let mut anchors: Vec<NodeAnchor> = Vec::new();
+        collect_anchors(root, kinds, &mut anchors, code.as_bytes());
+        assert!(anchors.iter().any(|a| a.name.as_deref() == Some("Draw")));
+    }
+
+    #[test]
+    fn anchors_rust_const_item() {
+        let code = "const MAX_SIZE: usize = 1024;\n";
+        let tree = parse_text(code, Language::Rust).unwrap();
+        let root = tree.root_node();
+        let kinds = Language::Rust.significant_kinds();
+        let mut anchors: Vec<NodeAnchor> = Vec::new();
+        collect_anchors(root, kinds, &mut anchors, code.as_bytes());
+        assert!(anchors.iter().any(|a| a.name.as_deref() == Some("MAX_SIZE")));
+    }
+
+    #[test]
+    fn anchors_rust_macro_definition() {
+        let code = "macro_rules! my_macro {\n    ($x:expr) => { $x };\n}\n";
+        let tree = parse_text(code, Language::Rust).unwrap();
+        let root = tree.root_node();
+        let kinds = Language::Rust.significant_kinds();
+        let mut anchors: Vec<NodeAnchor> = Vec::new();
+        collect_anchors(root, kinds, &mut anchors, code.as_bytes());
+        let has_macro = anchors.iter().any(|a| a.name.as_deref() == Some("my_macro"));
+        assert!(has_macro, "Expected macro anchor 'my_macro', got: {:?}", anchors);
+    }
+
+    #[test]
+    fn anchors_python_decorated_function() {
+        let code = "@app.route('/')\ndef index():\n    return 'hello'\n";
+        let tree = parse_text(code, Language::Python).unwrap();
+        let root = tree.root_node();
+        let kinds = Language::Python.significant_kinds();
+        let mut anchors: Vec<NodeAnchor> = Vec::new();
+        collect_anchors(root, kinds, &mut anchors, code.as_bytes());
+        assert!(anchors.iter().any(|a| a.name.as_deref() == Some("index")));
+    }
+
+    // ── Missing coverage: hunk boundary cases ──
+
+    #[test]
+    fn hunks_detect_javascript_from_cjs() {
+        assert_eq!(detect_language("common.cjs"), Some(Language::JavaScript));
+    }
+
+    #[test]
+    fn hunks_add_only_with_context() {
+        // Only additions within a function
+        let left = "fn foo() {\n}\n";
+        let right = "fn foo() {\n    let x = 1;\n}\n";
+
+        let result = text_diff(left, right, &DiffOptions::default());
+        let enhanced = enhance_with_syntax(result, left, right, Some(Language::Rust));
+        assert_eq!(enhanced.hunks.len(), 1);
+        assert!(enhanced.hunks[0].syntax_context.as_deref().unwrap_or("").contains("foo"));
+    }
+
+    #[test]
+    fn hunks_delete_only_with_context() {
+        let left = "fn foo() {\n    let x = 1;\n}\n";
+        let right = "fn foo() {\n}\n";
+
+        let result = text_diff(left, right, &DiffOptions::default());
+        let enhanced = enhance_with_syntax(result, left, right, Some(Language::Rust));
+        assert_eq!(enhanced.hunks.len(), 1);
+        assert!(enhanced.hunks[0].syntax_context.as_deref().unwrap_or("").contains("foo"));
+    }
+
+    #[test]
+    fn hunks_same_anchor_on_both_sides_merged() {
+        let left = "fn foo() {\n    let x = 1;\n    let y = 2;\n}\nfn bar() {\n    1\n}\n";
+        let right = "fn foo() {\n    let x = 10;\n    let y = 20;\n}\nfn bar() {\n    2\n}\n";
+
+        let result = text_diff(left, right, &DiffOptions::default());
+        let enhanced = enhance_with_syntax(result, left, right, Some(Language::Rust));
+        assert_eq!(enhanced.hunks.len(), 2);
+    }
+
+    #[test]
+    fn hunks_no_anchors_in_code_returns_unchanged() {
+        let left = "let x = 1;\n";
+        let right = "let x = 2;\n";
+
+        let result = text_diff(left, right, &DiffOptions::default());
+        let enhanced = enhance_with_syntax(result, left, right, Some(Language::Rust));
+        assert_eq!(enhanced.hunks.len(), 1);
+        assert!(enhanced.hunks[0].syntax_context.is_none());
+    }
+
+    #[test]
+    fn hunks_python_class_grouping() {
+        let left = "class Foo:\n    def a():\n        pass\n    def b():\n        pass\n";
+        let right = "class Foo:\n    def a():\n        return 1\n    def b():\n        return 2\n";
+
+        let result = text_diff(left, right, &DiffOptions::default());
+        let enhanced = enhance_with_syntax(result, left, right, Some(Language::Python));
+        assert_eq!(enhanced.hunks.len(), 2);
+    }
+
+    #[test]
+    fn enhance_with_syntax_handles_empty_text() {
+        let result = text_diff("", "", &DiffOptions::default());
+        let enhanced = enhance_with_syntax(result, "", "", Some(Language::Rust));
+        assert_eq!(enhanced.hunks.len(), 0);
+    }
+
+    #[test]
+    fn enhance_with_syntax_fallback_on_none_language() {
+        let left = "fn foo() {}\n";
+        let right = "fn bar() {}\n";
+        let result = text_diff(left, right, &DiffOptions::default());
+        let original_hunks = result.hunks.len();
+        let enhanced = enhance_with_syntax(result, left, right, None);
+        assert_eq!(enhanced.hunks.len(), original_hunks);
+    }
+
+    #[test]
+    fn anchors_rust_enum_item() {
+        let code = "enum Color {\n    Red,\n    Green,\n    Blue,\n}\n";
+        let tree = parse_text(code, Language::Rust).unwrap();
+        let root = tree.root_node();
+        let kinds = Language::Rust.significant_kinds();
+        let mut anchors: Vec<NodeAnchor> = Vec::new();
+        collect_anchors(root, kinds, &mut anchors, code.as_bytes());
+        assert!(anchors.iter().any(|a| a.name.as_deref() == Some("Color")));
+    }
+
+    #[test]
+    fn anchors_rust_static_item() {
+        let code = "static VERSION: &str = \"1.0\";\n";
+        let tree = parse_text(code, Language::Rust).unwrap();
+        let root = tree.root_node();
+        let kinds = Language::Rust.significant_kinds();
+        let mut anchors: Vec<NodeAnchor> = Vec::new();
+        collect_anchors(root, kinds, &mut anchors, code.as_bytes());
+        assert!(anchors.iter().any(|a| a.name.as_deref() == Some("VERSION")));
+    }
+
+    #[test]
+    fn anchors_rust_mod_item() {
+        let code = "mod utils;\n";
+        let tree = parse_text(code, Language::Rust).unwrap();
+        let root = tree.root_node();
+        let kinds = Language::Rust.significant_kinds();
+        let mut anchors: Vec<NodeAnchor> = Vec::new();
+        collect_anchors(root, kinds, &mut anchors, code.as_bytes());
+        assert!(anchors.iter().any(|a| a.name.as_deref() == Some("utils")));
+    }
+
+    #[test]
+    fn anchors_rust_type_item() {
+        let code = "type UserId = u64;\n";
+        let tree = parse_text(code, Language::Rust).unwrap();
+        let root = tree.root_node();
+        let kinds = Language::Rust.significant_kinds();
+        let mut anchors: Vec<NodeAnchor> = Vec::new();
+        collect_anchors(root, kinds, &mut anchors, code.as_bytes());
+        assert!(anchors.iter().any(|a| a.name.as_deref() == Some("UserId")));
+    }
 }

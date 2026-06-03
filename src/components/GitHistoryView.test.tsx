@@ -88,7 +88,7 @@ describe('GitHistoryView', () => {
       />
     ));
 
-    expect(screen.getByText('Alice')).toBeInTheDocument();
+    expect(screen.getAllByText('Alice').length).toBe(2);
     expect(screen.getByText('Bob')).toBeInTheDocument();
   });
 

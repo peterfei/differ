@@ -94,6 +94,8 @@ fn convert_git_diff(diff: git2::Diff, options: &DiffOptions) -> DiffResult {
         left_lines: max_old,
         right_lines: max_new,
         options: options.clone(),
+        left_label: None,
+        right_label: None,
     }
 }
 
@@ -209,6 +211,71 @@ pub fn diff_syntax(
     options: Option<DiffOptions>,
 ) -> Result<DiffResult, GitError> {
     diff_commits(repo, old, new, path, options)
+}
+
+/// Diff the two conflicting sides of a conflicted (unmerged) file.
+///
+/// Extracts stage 2 (ours = HEAD) and stage 3 (theirs = MERGE_HEAD) from the
+/// index and diffs them using the text-level diff engine. Returns a `DiffResult`
+/// showing what "we" changed vs what "they" changed.
+///
+/// If the file is not conflicted, returns an error.
+pub fn diff_conflict(
+    repo: &Repository,
+    path: String,
+    options: Option<DiffOptions>,
+) -> Result<DiffResult, GitError> {
+    let opts = options.unwrap_or_default();
+
+    let index = repo.index().map_err(|_| GitError::NotFound(path.clone()))?;
+
+    // Helper: extract stage from flags
+    let entry_stage = |entry: &git2::IndexEntry| (entry.flags >> 12) & 0x3;
+
+    // Find conflicted entries for this path by looking for stage > 0
+    let path_bytes = path.as_bytes();
+    let entries: Vec<git2::IndexEntry> = index
+        .iter()
+        .filter(|e| e.path.as_slice() == path_bytes && entry_stage(e) >= 1)
+        .collect();
+
+    if entries.is_empty() {
+        return Err(GitError::NotFound(format!(
+            "{} is not in conflicted state",
+            path
+        )));
+    }
+
+    // Find stage 2 (ours) and stage 3 (theirs)
+    let ours_entry = entries.iter().find(|e| entry_stage(e) == 2);
+    let theirs_entry = entries.iter().find(|e| entry_stage(e) == 3);
+
+    let ours_content = if let Some(entry) = ours_entry {
+        let blob = repo.find_blob(entry.id).map_err(|_| {
+            GitError::NotFound(format!("cannot read our blob for {}", path))
+        })?;
+        String::from_utf8_lossy(blob.content()).to_string()
+    } else {
+        String::new()
+    };
+
+    let theirs_content = if let Some(entry) = theirs_entry {
+        let blob = repo.find_blob(entry.id).map_err(|_| {
+            GitError::NotFound(format!("cannot read their blob for {}", path))
+        })?;
+        String::from_utf8_lossy(blob.content()).to_string()
+    } else {
+        String::new()
+    };
+
+    // Use the text-level diff engine to compare ours vs theirs
+    let mut result = crate::diff::text_diff::text_diff(&ours_content, &theirs_content, &opts);
+
+    // Mark the result so the frontend knows this is a conflict diff
+    result.left_label = Some("ours (HEAD)".to_string());
+    result.right_label = Some("theirs (MERGE_HEAD)".to_string());
+
+    Ok(result)
 }
 
 // ── Tests ──
@@ -555,5 +622,173 @@ mod tests {
                 .count();
             assert!(non_equal >= 2, "should have at least 2 non-equal changes, got {non_equal}");
         }
+    }
+
+    // ── diff_conflict ──
+
+    /// Helper: create a repo with a merge conflict on `hello.py` using git CLI.
+    fn setup_conflict_repo() -> (TempDir, Repository) {
+        let dir = TempDir::new().unwrap();
+        let repo_path = dir.path().to_path_buf();
+
+        // Helper to run git CLI commands
+        fn git_run(repo_path: &std::path::Path, args: &[&str]) {
+            let output = std::process::Command::new("git")
+                .args(args)
+                .current_dir(repo_path)
+                .output()
+                .expect("git command failed");
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                panic!("git {} failed: {}", args.join(" "), stderr);
+            }
+        }
+
+        // Config
+        git_run(&repo_path, &["init"]);
+        git_run(&repo_path, &["config", "user.email", "test@test.com"]);
+        git_run(&repo_path, &["config", "user.name", "Test"]);
+
+        // Initial commit
+        fs::write(
+            repo_path.join("hello.py"),
+            "def greet(name):\n    return f\"Hello, {name}!\"\n\ndef farewell(name):\n    return f\"Goodbye, {name}!\"\n\nif __name__ == \"__main__\":\n    print(greet(\"World\"))\n    print(farewell(\"World\"))\n",
+        )
+        .unwrap();
+        git_run(&repo_path, &["add", "hello.py"]);
+        git_run(&repo_path, &["commit", "-m", "initial"]);
+
+        // Create feature branch
+        git_run(&repo_path, &["branch", "feature"]);
+
+        // Checkout feature and modify
+        git_run(&repo_path, &["checkout", "feature"]);
+        fs::write(
+            repo_path.join("hello.py"),
+            "def greet(name):\n    return f\"Hey there, {name}!\"\n\ndef farewell(name):\n    return f\"Goodbye, {name}!\"\n\nif __name__ == \"__main__\":\n    print(greet(\"World\"))\n    print(farewell(\"World\"))\n",
+        )
+        .unwrap();
+        git_run(&repo_path, &["add", "hello.py"]);
+        git_run(&repo_path, &["commit", "-m", "feature change"]);
+
+        // Switch back to main, modify differently
+        git_run(&repo_path, &["checkout", "main"]);
+        fs::write(
+            repo_path.join("hello.py"),
+            "def greet(name):\n    return f\"Hi, {name}!\"\n\ndef farewell(name):\n    return f\"Goodbye, {name}!\"\n\nif __name__ == \"__main__\":\n    print(greet(\"World\"))\n    print(farewell(\"World\"))\n",
+        )
+        .unwrap();
+        git_run(&repo_path, &["add", "hello.py"]);
+        git_run(&repo_path, &["commit", "-m", "main change"]);
+
+        // Attempt merge (will fail with conflict — that's OK)
+        let merge_output = std::process::Command::new("git")
+            .args(&["merge", "feature"])
+            .current_dir(&repo_path)
+            .output()
+            .expect("git merge failed");
+        // Merge should fail (exit code 1) with conflicts
+        assert!(!merge_output.status.success(), "merge should have failed with conflicts");
+
+        // Re-open with git2 for the test
+        (dir, Repository::open(&repo_path).unwrap())
+    }
+
+    #[test]
+    fn diff_conflict_index_has_entries() {
+        let (_dir, repo) = setup_conflict_repo();
+        let index = repo.index().unwrap();
+        let conflict_entries: Vec<_> = index.iter().filter(|e| (e.flags >> 12) & 0x3 >= 1).collect();
+        assert!(!conflict_entries.is_empty(), "should have conflict entries in index");
+        for e in &conflict_entries {
+            let stage = (e.flags >> 12) & 0x3;
+            let path = String::from_utf8_lossy(&e.path);
+            assert_eq!(path, "hello.py", "conflict path should be hello.py, got '{}'", path);
+            assert!(stage >= 1 && stage <= 3, "stage should be 1-3, got {}", stage);
+        }
+        // Verify we have all 3 stages
+        assert_eq!(conflict_entries.len(), 3, "need 3 conflict entries (base/ours/theirs)");
+    }
+
+    #[test]
+    fn diff_conflict_basic_conflict_returns_diff() {
+        let (_dir, repo) = setup_conflict_repo();
+        // Directly read blobs and test text_diff
+        let index = repo.index().unwrap();
+        let mut ours_text = String::new();
+        let mut theirs_text = String::new();
+        for entry in index.iter() {
+            let stage = (entry.flags >> 12) & 0x3;
+            if stage == 2 {
+                let blob = repo.find_blob(entry.id).unwrap();
+                ours_text = String::from_utf8_lossy(blob.content()).to_string();
+            } else if stage == 3 {
+                let blob = repo.find_blob(entry.id).unwrap();
+                theirs_text = String::from_utf8_lossy(blob.content()).to_string();
+            }
+        }
+        drop(index);
+        eprintln!("ours chars: {}", ours_text.chars().count());
+        eprintln!("theirs chars: {}", theirs_text.chars().count());
+
+        // Test text_diff directly
+        use crate::diff::text_diff::text_diff;
+        let diff_result = text_diff(&ours_text, &theirs_text, &Default::default());
+        eprintln!("Direct text_diff: hunks={}", diff_result.hunks.len());
+        for h in &diff_result.hunks {
+            eprintln!("  Hunk: old_start={}, changes={}", h.old_start, h.changes.len());
+            for c in &h.changes {
+                eprintln!("    Change: {:?} old={:?} new={:?}", c.change_type, c.old_line_no, c.new_line_no);
+            }
+        }
+
+        let result = diff_conflict(&repo, "hello.py".to_string(), None).unwrap();
+        // Verify we're getting a result with hunks
+        assert!(!result.hunks.is_empty(), "conflict diff should have hunks, got result left_lines={} right_lines={}", result.left_lines, result.right_lines);
+        // Should show the greeting line change
+        let has_add = result.hunks.iter().any(|h| {
+            h.changes.iter().any(|c| c.change_type == ChangeType::Add)
+        });
+        let has_del = result.hunks.iter().any(|h| {
+            h.changes.iter().any(|c| c.change_type == ChangeType::Delete)
+        });
+        assert!(has_add, "should have additions (theirs)");
+        assert!(has_del, "should have deletions (ours)");
+    }
+
+    #[test]
+    fn diff_conflict_sets_labels() {
+        let (_dir, repo) = setup_conflict_repo();
+        let result = diff_conflict(&repo, "hello.py".to_string(), None).unwrap();
+        assert_eq!(result.left_label, Some("ours (HEAD)".to_string()));
+        assert_eq!(result.right_label, Some("theirs (MERGE_HEAD)".to_string()));
+    }
+
+    #[test]
+    fn diff_conflict_non_conflicted_file_returns_error() {
+        let (_dir, repo) = setup_conflict_repo();
+        let result = diff_conflict(&repo, "nonexistent.py".to_string(), None);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("not in conflicted state"));
+    }
+
+    #[test]
+    fn diff_conflict_unmodified_file_returns_error() {
+        let dir = TempDir::new().unwrap();
+        let repo = Repository::init(dir.path()).unwrap();
+        let sig = Signature::now("test", "t@t.com").unwrap();
+
+        // Create and commit a file (no conflict)
+        fs::write(dir.path().join("ok.py"), "print('hello')\n").unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new("ok.py")).unwrap();
+        let tree_id = index.write_tree().unwrap();
+        let tree = repo.find_tree(tree_id).unwrap();
+        repo.commit(Some("HEAD"), &sig, &sig, "initial", &tree, &[])
+            .unwrap();
+
+        let result = diff_conflict(&repo, "ok.py".to_string(), None);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("not in conflicted state"));
     }
 }

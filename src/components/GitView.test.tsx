@@ -201,7 +201,7 @@ describe('GitView', () => {
     fireEvent.click(screen.getByText('打开仓库'));
 
     await vi.waitFor(() => {
-      expect(screen.getByText('文件状态')).toBeInTheDocument();
+      expect(screen.getByText('main')).toBeInTheDocument();
     });
 
     // Go back to repo selection
@@ -291,7 +291,7 @@ describe('GitView', () => {
     fireEvent.click(screen.getByText('打开仓库'));
 
     await vi.waitFor(() => {
-      expect(screen.getByText('文件状态')).toBeInTheDocument();
+      expect(screen.getByText('main')).toBeInTheDocument();
     });
 
     const backBtn = screen.getByTitle('返回');

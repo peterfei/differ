@@ -40,6 +40,8 @@ export interface DiffResult {
   left_lines: number;
   right_lines: number;
   options: DiffOptions;
+  left_label?: string;
+  right_label?: string;
 }
 
 // ── 目录对比 ──

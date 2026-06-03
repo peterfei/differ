@@ -106,6 +106,11 @@ git_cmd!(
     => git::diff::diff_syntax => DiffResult
 );
 
+git_cmd!(
+    git_diff_conflict(path: String, options: Option<DiffOptions>)
+    => git::diff::diff_conflict => DiffResult
+);
+
 // ── Tests ──
 
 #[cfg(test)]

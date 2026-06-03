@@ -9,13 +9,14 @@ beforeEach(() => {
 
 const mockStagedEntries: GitStatusEntry[] = [
   { path: 'src/main.rs', status: 'Modified', staged: true, added_lines: 5, deleted_lines: 2 },
-  { path: 'src/lib.rs', status: 'New', staged: true, added_lines: 20, deleted_lines: 0 },
+  { path: 'src/lib.rs', status: 'Modified', staged: true, added_lines: 20, deleted_lines: 0 },
 ];
 
 const mockUnstagedEntries: GitStatusEntry[] = [
   { path: 'README.md', status: 'Modified', staged: false, added_lines: 1, deleted_lines: 1 },
   { path: 'Cargo.toml', status: 'Modified', staged: false, added_lines: 0, deleted_lines: 3 },
   { path: 'old.rs', status: 'Deleted', staged: false, added_lines: 0, deleted_lines: 50 },
+  { path: 'new_file.rs', status: 'New', staged: false, added_lines: 42, deleted_lines: 0 },
 ];
 
 const mockConflictEntry: GitStatusEntry = {
