@@ -1,9 +1,11 @@
-import { createSignal, Show, For } from "solid-js";
+import { createSignal, Show, For, onMount, onCleanup } from "solid-js";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import type { GitRepoInfo, GitStatusEntry, GitCommit, GitBranch } from "../types/git";
 import type { DiffResult, DiffChange } from "../types/diff";
 import { GitSidebar } from "./GitSidebar";
 import { GitHistoryView } from "./GitHistoryView";
 import { GitBranchSelector } from "./GitBranchSelector";
+import { pendingRepoPath as navPendingRepoPath, setPendingRepoPath } from "../lib/navStore";
 
 interface GitViewProps {
   onOpenDiffView?: (left: string, right: string, base?: string) => void;
@@ -18,6 +20,9 @@ export function GitView(props: GitViewProps) {
   const [repoInfo, setRepoInfo] = createSignal<GitRepoInfo | null>(null);
   const [loading, setLoading] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
+
+  // Data loading errors
+  const [dataError, setDataError] = createSignal<string | null>(null);
 
   // Data state
   const [statusEntries, setStatusEntries] = createSignal<GitStatusEntry[]>([]);
@@ -46,9 +51,50 @@ export function GitView(props: GitViewProps) {
   const [activePanel, setActivePanel] = createSignal<ActivePanel>("status");
 
   const PAGE_SIZE = 50;
+  const RECENT_REPOS_KEY = 'differ_recent_repos';
+  const MAX_RECENT = 10;
+
+  // 最近仓库列表
+  const [recentRepos, setRecentRepos] = createSignal<string[]>(
+    (() => {
+      try {
+        const raw = localStorage.getItem(RECENT_REPOS_KEY);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch { return []; }
+    })()
+  );
+
+  function saveRecentRepo(path: string) {
+    let repos = recentRepos();
+    if (!Array.isArray(repos)) {
+      repos = [];
+      setRecentRepos([]);
+    }
+    repos = repos.filter(r => r !== path);
+    repos.unshift(path);
+    const trimmed = repos.slice(0, MAX_RECENT);
+    setRecentRepos(trimmed);
+    localStorage.setItem(RECENT_REPOS_KEY, JSON.stringify(trimmed));
+  }
+
+  // 自动打开从外部传入的仓库路径
+  onMount(() => {
+    const pending = navPendingRepoPath();
+    if (pending) {
+      setRepoPath(pending);
+      setPendingRepoPath(null);
+      // 延迟一帧执行 openRepo，确保信号已更新
+      setTimeout(() => openRepo(), 0);
+    }
+  });
 
   async function openRepo() {
-    let path = repoPath().trim();
+    await doOpenRepo(repoPath().trim());
+  }
+
+  async function doOpenRepo(path: string) {
     if (!path) {
       setError("请输入仓库路径");
       return;
@@ -59,7 +105,6 @@ export function GitView(props: GitViewProps) {
       try {
         const { homeDir } = await import("@tauri-apps/api/path");
         let home = await homeDir();
-        // 确保家目录以 / 结尾，方便拼接
         if (!home.endsWith("/")) home += "/";
         path = path === "~" ? home.replace(/\/$/, "") : home + path.slice(2);
       } catch {
@@ -69,16 +114,21 @@ export function GitView(props: GitViewProps) {
 
     setLoading(true);
     setError(null);
+    setDataError(null);
     try {
       const { invoke } = await import("@tauri-apps/api/core");
+      console.warn("[GitView] git_open path:", path);
       const info = await invoke<GitRepoInfo>("git_open", { path });
+      console.warn("[GitView] git_open OK, work_dir:", info.work_dir, "typeof:", typeof info.work_dir);
       setRepoInfo(info);
+      saveRecentRepo(info.work_dir);
 
       // Load initial data in parallel
+      console.warn("[GitView] loading data with work_dir:", info.work_dir);
       await Promise.all([
-        loadStatus(info.path),
-        loadCommits(info.path, 0),
-        loadBranches(info.path),
+        loadStatus(info.work_dir),
+        loadCommits(info.work_dir, 0),
+        loadBranches(info.work_dir),
       ]);
     } catch (e) {
       setError(String(e));
@@ -90,10 +140,13 @@ export function GitView(props: GitViewProps) {
   async function loadStatus(repoPathVal: string) {
     try {
       const { invoke } = await import("@tauri-apps/api/core");
+      console.warn("[GitView] calling git_status with repoPath:", repoPathVal);
       const entries = await invoke<GitStatusEntry[]>("git_status", { repoPath: repoPathVal });
+      console.warn("[GitView] git_status returned", entries.length, "entries");
       setStatusEntries(entries);
     } catch (e) {
       console.error("Failed to load status:", e);
+      setDataError(`状态加载失败: ${e}`);
     }
   }
 
@@ -101,11 +154,13 @@ export function GitView(props: GitViewProps) {
     setLoadingCommits(true);
     try {
       const { invoke } = await import("@tauri-apps/api/core");
+      console.warn("[GitView] calling git_log with repoPath:", repoPathVal, "page:", page);
       const results = await invoke<GitCommit[]>("git_log", {
         repoPath: repoPathVal,
         maxCount: PAGE_SIZE,
         skip: page * PAGE_SIZE,
       });
+      console.warn("[GitView] git_log returned", results.length, "commits");
       if (page === 0) {
         setCommits(results);
       } else {
@@ -115,6 +170,7 @@ export function GitView(props: GitViewProps) {
       setCommitPage(page);
     } catch (e) {
       console.error("Failed to load commits:", e);
+      setDataError(`提交记录加载失败: ${e}`);
     } finally {
       setLoadingCommits(false);
     }
@@ -123,13 +179,16 @@ export function GitView(props: GitViewProps) {
   async function loadBranches(repoPathVal: string) {
     try {
       const { invoke } = await import("@tauri-apps/api/core");
+      console.warn("[GitView] calling git_branches with repoPath:", repoPathVal);
       const results = await invoke<GitBranch[]>("git_branches", {
         repoPath: repoPathVal,
         includeRemote: false,
       });
+      console.warn("[GitView] git_branches returned", results.length, "branches");
       setBranches(results);
     } catch (e) {
       console.error("Failed to load branches:", e);
+      setDataError(`分支加载失败: ${e}`);
     }
   }
 
@@ -145,7 +204,7 @@ export function GitView(props: GitViewProps) {
       const { invoke } = await import("@tauri-apps/api/core");
       const cmd = staged ? "git_diff_staged" : "git_diff_unstaged";
       const result = await invoke<DiffResult>(cmd, {
-        repoPath: repo.path,
+        repoPath: repo.work_dir,
         path: path,
         options: { algorithm: "Myers", context_lines: 3, ignore_whitespace: false, ignore_case: false },
       });
@@ -171,7 +230,7 @@ export function GitView(props: GitViewProps) {
       try {
         const { invoke } = await import("@tauri-apps/api/core");
         const result = await invoke<DiffResult>("git_diff_commits", {
-          repoPath: repo.path,
+          repoPath: repo.work_dir,
           fromCommit: from.id,
           toCommit: commit.id,
           options: { algorithm: "Myers", context_lines: 3, ignore_whitespace: false, ignore_case: false },
@@ -197,7 +256,7 @@ export function GitView(props: GitViewProps) {
       try {
         const { invoke } = await import("@tauri-apps/api/core");
         const result = await invoke<DiffResult>("git_diff_commits", {
-          repoPath: repo.path,
+          repoPath: repo.work_dir,
           fromCommit: commit.id,
           options: { algorithm: "Myers", context_lines: 3, ignore_whitespace: false, ignore_case: false },
         });
@@ -225,7 +284,7 @@ export function GitView(props: GitViewProps) {
     try {
       const { invoke } = await import("@tauri-apps/api/core");
       const result = await invoke<DiffResult>("git_diff_branches", {
-        repoPath: repo.path,
+        repoPath: repo.work_dir,
         baseBranch: base,
         targetBranch: target,
         options: { algorithm: "Myers", context_lines: 3, ignore_whitespace: false, ignore_case: false },
@@ -251,7 +310,7 @@ export function GitView(props: GitViewProps) {
   function handleLoadMoreCommits() {
     const repo = repoInfo();
     if (!repo || loadingCommits()) return;
-    loadCommits(repo.path, commitPage() + 1);
+    loadCommits(repo.work_dir, commitPage() + 1);
   }
 
   function closeRepo() {
@@ -297,6 +356,9 @@ export function GitView(props: GitViewProps) {
             onOpen={openRepo}
             loading={loading()}
             error={error()}
+            recentRepos={recentRepos()}
+            onOpenRecent={(path) => { setRepoPath(path); openRepo(); }}
+            onOpenPath={(path) => { doOpenRepo(path); }}
           />
         }
       >
@@ -324,6 +386,7 @@ export function GitView(props: GitViewProps) {
           selectedDiff={selectedDiff()}
           selectedFilePath={selectedFilePath()}
           diffLoading={diffLoading()}
+          dataError={dataError()}
           onClose={closeRepo}
         />
       </Show>
@@ -339,9 +402,62 @@ function RepoSelectionView(props: {
   onOpen: () => void;
   loading: boolean;
   error: string | null;
+  recentRepos: string[];
+  onOpenRecent: (path: string) => void;
+  onOpenPath: (path: string) => void;
 }) {
+  const [dragOver, setDragOver] = createSignal(false);
+
+  // 使用 Tauri 原生拖放事件（HTML5 DragEvent 在 Tauri v2 webview 中不工作）
+  onMount(() => {
+    let unlisten: (() => void) | undefined;
+    getCurrentWebview().onDragDropEvent((event) => {
+      if (event.payload.type === 'over') {
+        setDragOver(true);
+      } else if (event.payload.type === 'leave') {
+        setDragOver(false);
+      } else if (event.payload.type === 'drop') {
+        setDragOver(false);
+        const paths = event.payload.paths;
+        if (paths.length > 0) {
+          handleFileDrop(paths[0]);
+        }
+      }
+    }).then((fn) => { unlisten = fn; });
+    onCleanup(() => unlisten?.());
+  });
+
+  async function handleFileDrop(p: string) {
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      console.warn("[GitView] git_discover path:", p);
+      const repoWorkDir = await invoke<string>("git_discover", { path: p });
+      console.warn("[GitView] git_discover OK, work_dir:", repoWorkDir);
+      // 直接打开，不依赖信号传播
+      props.onOpenPath(repoWorkDir);
+    } catch {
+      // 不是 git 仓库，直接尝试打开父目录
+      props.onRepoPathChange(p);
+      props.onOpen();
+    }
+  }
+
   return (
-    <div class="flex-1 flex items-center justify-center">
+    <div
+      class="flex-1 flex items-center justify-center relative"
+    >
+      {/* 拖放高亮遮罩 */}
+      <Show when={dragOver()}>
+        <div class="absolute inset-0 z-30 bg-indigo-500/10 border-2 border-dashed border-indigo-500/40 rounded-2xl flex items-center justify-center pointer-events-none">
+          <div class="text-center">
+            <svg class="w-10 h-10 mx-auto mb-2 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+            </svg>
+            <p class="text-sm text-indigo-300 font-medium">拖放文件/文件夹以查找 Git 仓库</p>
+          </div>
+        </div>
+      </Show>
+
       <div class="w-full max-w-md px-6">
         <div class="text-center mb-8">
           <div class="w-14 h-14 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mx-auto mb-4">
@@ -350,7 +466,7 @@ function RepoSelectionView(props: {
             </svg>
           </div>
           <h2 class="text-lg font-semibold text-slate-200 mb-1">打开 Git 仓库</h2>
-          <p class="text-xs text-slate-500">输入本地 Git 仓库路径，查看变更、提交历史和分支</p>
+          <p class="text-xs text-slate-500">输入路径、从最近仓库选择，或拖放文件/文件夹到此处</p>
         </div>
 
         <div class="flex items-center gap-2">
@@ -382,6 +498,36 @@ function RepoSelectionView(props: {
               <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
             </svg>
             <span class="text-xs text-red-400">{props.error}</span>
+          </div>
+        </Show>
+
+        {/* 最近仓库 */}
+        <Show when={props.recentRepos.length > 0}>
+          <div class="mt-6">
+            <div class="flex items-center gap-2 mb-2">
+              <svg class="w-3.5 h-3.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">最近仓库</span>
+            </div>
+            <div class="space-y-1">
+              <For each={props.recentRepos}>
+                {(repo) => (
+                  <button
+                    onClick={() => props.onOpenRecent(repo)}
+                    class="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-800/30 hover:bg-slate-800/60 transition-colors text-left"
+                  >
+                    <svg class="w-4 h-4 flex-shrink-0 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
+                    </svg>
+                    <span class="flex-1 text-xs text-slate-300 truncate min-w-0">{repo}</span>
+                    <svg class="w-3.5 h-3.5 flex-shrink-0 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                    </svg>
+                  </button>
+                )}
+              </For>
+            </div>
           </div>
         </Show>
 
@@ -418,6 +564,7 @@ function RepoView(props: {
   selectedDiff: DiffResult | null;
   selectedFilePath: string;
   diffLoading: boolean;
+  dataError?: string | null;
   onClose: () => void;
 }) {
   return (
@@ -444,6 +591,16 @@ function RepoView(props: {
           </Show>
         </div>
       </div>
+
+      {/* 数据加载错误提示 */}
+      <Show when={props.dataError}>
+        <div class="flex-shrink-0 px-3 py-1.5 bg-red-950/60 border-b border-red-900/40 flex items-center gap-2">
+          <svg class="w-3.5 h-3.5 text-red-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+          </svg>
+          <span class="text-xs text-red-400">{props.dataError}</span>
+        </div>
+      </Show>
 
       {/* Three panel layout */}
       <div class="flex-1 flex overflow-hidden">

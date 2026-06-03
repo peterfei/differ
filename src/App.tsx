@@ -1,4 +1,5 @@
 import { createSignal, onMount } from 'solid-js';
+import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { DiffView } from './components/DiffView';
 import { Dashboard } from './components/Dashboard';
 import { HistoryView } from './components/HistoryView';
@@ -7,7 +8,7 @@ import { DirectoryDiffView } from './components/DirectoryDiffView';
 import { MergeView } from './components/MergeView';
 import { GitView } from './components/GitView';
 import { getSettings } from './lib/settings';
-import { setDiffPaths, setMergePaths } from './lib/navStore';
+import { setDiffPaths, setMergePaths, setPendingRepoPath } from './lib/navStore';
 
 type View = 'dashboard' | 'diff' | 'merge' | 'history' | 'git' | 'settings';
 type DiffMode = 'file' | 'directory';
@@ -27,6 +28,17 @@ function App() {
       html.classList.toggle('dark', mq.matches);
       mq.addEventListener('change', (e) => html.classList.toggle('dark', e.matches));
     }
+
+    // 设置 Tauri 原生拖放事件（HTML5 DragEvent 在 Tauri v2 webview 中不工作）
+    getCurrentWebview().onDragDropEvent((event) => {
+      if (event.payload.type === 'drop') {
+        const paths = event.payload.paths;
+        if (paths.length === 0) return;
+        // 如果已经在 Git 视图，让 GitView 自己处理拖放
+        if (currentView() === 'git') return;
+        discoverAndOpenRepo(paths[0]);
+      }
+    });
   });
 
   function openFileDiff(left: string, right: string, base?: string) {
@@ -43,6 +55,17 @@ function App() {
   function openDirectoryDiff() {
     setDiffMode('directory');
     setCurrentView('diff');
+  }
+
+  async function discoverAndOpenRepo(path: string) {
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const repoWorkDir = await invoke<string>("git_discover", { path });
+      setPendingRepoPath(repoWorkDir);
+      setCurrentView('git');
+    } catch {
+      // 不是 git 仓库，忽略拖放
+    }
   }
 
   return (
