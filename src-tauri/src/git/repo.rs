@@ -15,20 +15,38 @@ use crate::git::GitError;
 static DISCOVERY_CACHE: LazyLock<Mutex<HashMap<String, String>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
+/// Expand `~` to the user's home directory.
+fn expand_tilde(path: &str) -> String {
+    if path == "~" {
+        std::env::var("HOME").unwrap_or_else(|_| "~".into())
+    } else if path.starts_with("~/") {
+        if let Ok(home) = std::env::var("HOME") {
+            home + &path[1..]
+        } else {
+            path.to_string()
+        }
+    } else {
+        path.to_string()
+    }
+}
+
 /// Open a repository by path.
 ///
 /// Tries `Repository::open()` first (exact path), falls back to
 /// `Repository::discover()` (walks up directories looking for `.git`).
 /// Discovery results are cached to avoid repeated filesystem walks.
 pub fn open_repo(path: &str) -> Result<Repository, GitError> {
+    // Expand ~ to home directory
+    let path = expand_tilde(path);
+
     // Try exact path first
-    if let Ok(repo) = Repository::open(path) {
+    if let Ok(repo) = Repository::open(&path) {
         return Ok(repo);
     }
 
     // Check discovery cache
     if let Ok(cache) = DISCOVERY_CACHE.lock() {
-        if let Some(git_dir) = cache.get(path) {
+        if let Some(git_dir) = cache.get(path.as_str()) {
             if let Ok(repo) = Repository::open(git_dir) {
                 return Ok(repo);
             }
@@ -37,12 +55,12 @@ pub fn open_repo(path: &str) -> Result<Repository, GitError> {
 
     // Discover from scratch
     let repo =
-        Repository::discover(path).map_err(|_| GitError::NotARepository(path.to_string()))?;
+        Repository::discover(&path).map_err(|_| GitError::NotARepository(path.clone()))?;
 
     // Cache the discovered path
     let git_dir = repo.path().to_string_lossy().to_string();
     if let Ok(mut cache) = DISCOVERY_CACHE.lock() {
-        cache.insert(path.to_string(), git_dir);
+        cache.insert(path.clone(), git_dir);
     }
 
     Ok(repo)
@@ -102,7 +120,8 @@ pub fn get_repo_info(repo: &Repository) -> Result<GitRepoInfo, GitError> {
 
 /// Discover a git repository starting from `path`, walking upward.
 pub fn discover_repo(from_path: &str) -> Result<String, GitError> {
-    let repo = Repository::discover(from_path)
+    let from_path = expand_tilde(from_path);
+    let repo = Repository::discover(&from_path)
         .map_err(|_| GitError::NotARepository(from_path.to_string()))?;
     repo.path()
         .parent()
