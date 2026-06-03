@@ -28,7 +28,18 @@
 
 ### macOS
 
-从 [Releases](https://github.com/peterfei/differ/releases) 页面下载最新的 `.dmg` 安装包。
+**Homebrew（推荐）：**
+
+```bash
+brew tap peterfei/homebrew-differ
+brew install --cask differ
+```
+
+或从 [Releases](https://github.com/peterfei/differ/releases) 页面下载最新的 `.dmg` 安装包。
+
+### Windows & Linux
+
+从 [Releases](https://github.com/peterfei/differ/releases) 页面下载对应平台的安装包（`.msi` / `.deb` / `.AppImage`）。
 
 ### Windows & Linux
 

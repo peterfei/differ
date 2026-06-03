@@ -28,7 +28,14 @@ A modern desktop application for file comparison and merging, built with Tauri v
 
 ### macOS
 
-Download the latest `.dmg` from the [Releases](https://github.com/peterfei/differ/releases) page.
+**Homebrew (recommended):**
+
+```bash
+brew tap peterfei/homebrew-differ
+brew install --cask differ
+```
+
+Or download the latest `.dmg` from the [Releases](https://github.com/peterfei/differ/releases) page.
 
 ### Windows & Linux
 
