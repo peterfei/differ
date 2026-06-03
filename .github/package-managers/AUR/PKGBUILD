@@ -1,0 +1,30 @@
+# Maintainer: peterfei <peterfeispace@gmail.com>
+# Contributor: peterfei <peterfeispace@gmail.com>
+
+pkgname=differ-bin
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="A visual diff tool with syntax-aware diffing, directory comparison, and three-way merge support"
+arch=('x86_64')
+url="https://github.com/peterfei/differ"
+license=('MIT')
+depends=('glibc' 'libstdc++' 'gtk3' 'libwebkitgtk-6.0' 'libsoup3')
+conflicts=('differ')
+source=("${url}/releases/download/v${pkgver}/Differ_${pkgver}_amd64.AppImage")
+sha256sums=('b9d09118654785e287c55a77d521f499c1aa10ab8edecad19270e30d5c40c014')
+
+package() {
+  install -Dm755 "${srcdir}/Differ_${pkgver}_amd64.AppImage" "${pkgdir}/usr/bin/differ"
+  install -d "${pkgdir}/usr/share/applications"
+  install -d "${pkgdir}/usr/share/icons/hicolor/256x256/apps"
+
+  cat > "${pkgdir}/usr/share/applications/differ.desktop" << EOF
+[Desktop Entry]
+Name=Differ
+Comment=A visual diff tool with syntax-aware diffing
+Exec=differ
+Type=Application
+Categories=Development;Utility;
+Terminal=false
+EOF
+}
