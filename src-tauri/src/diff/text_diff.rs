@@ -74,6 +74,10 @@ pub struct DiffResult {
     pub left_lines: usize,
     pub right_lines: usize,
     pub options: DiffOptions,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub left_label: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub right_label: Option<String>,
 }
 
 // ── Diff Engine Implementation ──
@@ -158,6 +162,8 @@ pub fn text_diff(left: &str, right: &str, options: &DiffOptions) -> DiffResult {
         right_lines: right_lines.len(),
         hunks,
         options: options.clone(),
+        left_label: None,
+        right_label: None,
     }
 }
 
@@ -238,7 +244,8 @@ impl DiffHunkBuilder {
     }
 
     fn build(mut self) -> DiffHunk {
-        // Trim trailing context lines beyond context_lines
+        // Flush trailing context into changes, then trim excess
+        self.changes.append(&mut self.context_before);
         let keep = self.changes.len().saturating_sub(
             self.trailing_equal_count.saturating_sub(3),
         );
