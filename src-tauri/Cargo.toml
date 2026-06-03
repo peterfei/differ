@@ -21,6 +21,12 @@ tokio = { version = "1", features = ["full"] }
 tauri-plugin-store = "2.4.3"
 notify = "8.2.0"
 
+# Git integration
+git2 = "0.19"
+
+# Error handling
+thiserror = "1"
+
 # tree-sitter for syntax-aware diff
 tree-sitter = "0.24"
 tree-sitter-rust = "0.23"

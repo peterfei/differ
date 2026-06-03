@@ -1,6 +1,7 @@
 pub mod commands;
 pub mod diff;
 pub mod fs;
+pub mod git;
 
 use fs::watcher::WatcherState;
 
@@ -21,6 +22,18 @@ pub fn run() {
             commands::merge::save_text_to_file,
             commands::watcher::watch_files,
             commands::watcher::unwatch_files,
+            // Git commands (Phase 1: read-only)
+            commands::git::git_open,
+            commands::git::git_close,
+            commands::git::git_status,
+            commands::git::git_log,
+            commands::git::git_branches,
+            commands::git::git_diff_commits,
+            commands::git::git_diff_branches,
+            commands::git::git_diff_unstaged,
+            commands::git::git_diff_staged,
+            commands::git::git_diff_working,
+            commands::git::git_diff_syntax,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
