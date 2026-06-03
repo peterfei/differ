@@ -211,7 +211,7 @@ export function GitView(props: GitViewProps) {
       }
 
       const cmd = staged ? "git_diff_staged" : "git_diff_unstaged";
-      result = await invoke<DiffResult>(cmd, {
+      const result = await invoke<DiffResult>(cmd, {
         repoPath: repo.work_dir,
         path: path,
         options: { algorithm: "Myers", context_lines: 3, ignore_whitespace: false, ignore_case: false },
