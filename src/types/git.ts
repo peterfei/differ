@@ -56,6 +56,14 @@ export interface MergeConflictContent {
   remote: string;
 }
 
+/** 冲突文件的三个 stage 内容（镜像 Rust ConflictContent） */
+export interface ConflictContent {
+  base_text: string;
+  ours_text: string;
+  theirs_text: string;
+  file_path: string;
+}
+
 /** Diff 类型（决定如何获取 diff） */
 export type GitDiffKind =
   | { type: "unstaged"; path: string }

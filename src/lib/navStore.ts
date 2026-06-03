@@ -6,5 +6,11 @@ export const [diffPaths, setDiffPaths] = createSignal<{ left: string; right: str
 /** 跨组件导航：从文件对比→三路合并 */
 export const [mergePaths, setMergePaths] = createSignal<{ base: string; left: string; right: string } | null>(null);
 
+/** 跨组件导航：从 Git 视图 → Git 冲突合并视图 */
+export const [gitConflictContext, setGitConflictContext] = createSignal<{
+  repoPath: string;
+  filePath: string;
+} | null>(null);
+
 /** 跨组件导航：自动发现仓库后跳转到 Git 视图 */
 export const [pendingRepoPath, setPendingRepoPath] = createSignal<string | null>(null);

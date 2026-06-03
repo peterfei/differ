@@ -1,5 +1,7 @@
 use git2::Repository;
 
+use std::path::Path;
+
 use crate::diff::text_diff::{ChangeType, DiffChange, DiffHunk, DiffOptions, DiffResult};
 use crate::git::GitError;
 
@@ -276,6 +278,91 @@ pub fn diff_conflict(
     result.right_label = Some("theirs (MERGE_HEAD)".to_string());
 
     Ok(result)
+}
+
+// ── Merge Conflict Content (three-stage extraction + resolve) ──
+
+/// Content of all three stages for a conflicted file from the Git index.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ConflictContent {
+    pub base_text: String,
+    pub ours_text: String,
+    pub theirs_text: String,
+    pub file_path: String,
+}
+
+/// Extract all three stages (base/ours/theirs) for a conflicted file from the Git index.
+///
+/// Stage 1 = merge base (common ancestor)
+/// Stage 2 = ours (HEAD)
+/// Stage 3 = theirs (MERGE_HEAD)
+///
+/// If the file is not conflicted, returns an error.
+pub fn get_conflict_content(
+    repo: &Repository,
+    path: String,
+) -> Result<ConflictContent, GitError> {
+    let index = repo.index().map_err(|_| GitError::NotFound(path.clone()))?;
+
+    let entry_stage = |entry: &git2::IndexEntry| (entry.flags >> 12) & 0x3;
+    let path_bytes = path.as_bytes();
+    let entries: Vec<git2::IndexEntry> = index
+        .iter()
+        .filter(|e| e.path.as_slice() == path_bytes && entry_stage(e) >= 1)
+        .collect();
+
+    if entries.is_empty() {
+        return Err(GitError::NotFound(format!(
+            "{} is not in conflicted state",
+            path
+        )));
+    }
+
+    let read_stage = |stage: u16| -> Result<String, GitError> {
+        match entries.iter().find(|e| entry_stage(e) == stage) {
+            Some(entry) => {
+                let blob = repo.find_blob(entry.id).map_err(|_| {
+                    GitError::NotFound(format!("cannot read stage {} blob for {}", stage, path))
+                })?;
+                Ok(String::from_utf8_lossy(blob.content()).to_string())
+            }
+            None => Ok(String::new()),
+        }
+    };
+
+    Ok(ConflictContent {
+        base_text: read_stage(1)?,
+        ours_text: read_stage(2)?,
+        theirs_text: read_stage(3)?,
+        file_path: path,
+    })
+}
+
+/// Write resolved content to the working tree and stage it, marking the conflict as resolved.
+///
+/// The `content` should be the fully resolved file content (without conflict markers).
+/// After this call, the file will be staged in the index (stage 0) and no longer show
+/// as conflicted.
+pub fn resolve_conflict(
+    repo: &Repository,
+    path: String,
+    content: String,
+) -> Result<(), GitError> {
+    // 1. Resolve the workdir — repo.workdir() is guaranteed to be Some for a non-bare repo
+    let workdir = repo
+        .workdir()
+        .ok_or_else(|| GitError::NotFound("bare repository has no workdir".into()))?;
+    let file_path = workdir.join(&path);
+
+    // 2. Write resolved content to working tree
+    std::fs::write(&file_path, &content).map_err(GitError::IoError)?;
+
+    // 3. Stage the file (replaces conflicted index entries with a single stage-0 entry)
+    let mut index = repo.index().map_err(|_| GitError::NotFound(path.clone()))?;
+    index.add_path(Path::new(&path)).map_err(|e| GitError::NotFound(format!("cannot add {} to index: {}", path, e)))?;
+    index.write().map_err(|e| GitError::Libgit2(e))?;
+
+    Ok(())
 }
 
 // ── Tests ──
@@ -790,5 +877,97 @@ mod tests {
         let result = diff_conflict(&repo, "ok.py".to_string(), None);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("not in conflicted state"));
+    }
+
+    // ── get_conflict_content ──
+
+    #[test]
+    fn get_conflict_content_extracts_all_stages() {
+        let (_dir, repo) = setup_conflict_repo();
+        let result = get_conflict_content(&repo, "hello.py".to_string()).unwrap();
+        assert_eq!(result.file_path, "hello.py");
+        // Verify each stage has content (non-empty strings)
+        assert!(!result.base_text.is_empty(), "base_text should not be empty");
+        assert!(!result.ours_text.is_empty(), "ours_text should not be empty");
+        assert!(!result.theirs_text.is_empty(), "theirs_text should not be empty");
+        // The three texts should differ from each other
+        assert_ne!(result.base_text, result.ours_text, "base and ours should differ");
+        assert_ne!(result.base_text, result.theirs_text, "base and theirs should differ");
+        assert_ne!(result.ours_text, result.theirs_text, "ours and theirs should differ");
+    }
+
+    #[test]
+    fn get_conflict_content_non_conflicted_file_errors() {
+        let (_dir, repo) = setup_conflict_repo();
+        let result = get_conflict_content(&repo, "nonexistent.py".to_string());
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("not in conflicted state"));
+    }
+
+    #[test]
+    fn get_conflict_content_unmodified_file_returns_error() {
+        let dir = TempDir::new().unwrap();
+        let repo = Repository::init(dir.path()).unwrap();
+        let sig = Signature::now("test", "t@t.com").unwrap();
+        fs::write(dir.path().join("ok.py"), "print('hello')\n").unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new("ok.py")).unwrap();
+        let tree_id = index.write_tree().unwrap();
+        let tree = repo.find_tree(tree_id).unwrap();
+        repo.commit(Some("HEAD"), &sig, &sig, "initial", &tree, &[])
+            .unwrap();
+        let result = get_conflict_content(&repo, "ok.py".to_string());
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("not in conflicted state"));
+    }
+
+    // ── resolve_conflict ──
+
+    #[test]
+    fn resolve_conflict_writes_to_working_tree() {
+        let (dir, repo) = setup_conflict_repo();
+        let resolved = "def greet(name):\n    return f\"Hello, {name}!\"\n".to_string();
+        resolve_conflict(&repo, "hello.py".to_string(), resolved.clone()).unwrap();
+
+        let content = fs::read_to_string(dir.path().join("hello.py")).unwrap();
+        assert_eq!(content, resolved, "working tree should contain the resolved content");
+    }
+
+    #[test]
+    fn resolve_conflict_clears_conflict_flag() {
+        let (_dir, repo) = setup_conflict_repo();
+        let resolved = "def greet(name):\n    return f\"Hello, {name}!\"\n".to_string();
+        resolve_conflict(&repo, "hello.py".to_string(), resolved).unwrap();
+
+        // Check status no longer shows CONFLICTED
+        let mut status_opts = git2::StatusOptions::new();
+        status_opts.pathspec("hello.py");
+        let statuses = repo.statuses(Some(&mut status_opts)).unwrap();
+        let has_conflict = statuses.iter().any(|s| {
+            s.status().intersects(git2::Status::CONFLICTED)
+        });
+        assert!(!has_conflict, "file should no longer be conflicted after resolve");
+    }
+
+    #[test]
+    fn resolve_conflict_adds_to_index() {
+        let (_dir, repo) = setup_conflict_repo();
+        let resolved = "def greet(name):\n    return f\"Hello, {name}!\"\n".to_string();
+        resolve_conflict(&repo, "hello.py".to_string(), resolved).unwrap();
+
+        // Verify index no longer has conflict entries for hello.py
+        let index = repo.index().unwrap();
+        let conflict_entries: Vec<_> = index
+            .iter()
+            .filter(|e| {
+                let path = String::from_utf8_lossy(&e.path);
+                path == "hello.py" && ((e.flags >> 12) & 0x3 >= 1)
+            })
+            .collect();
+        assert!(
+            conflict_entries.is_empty(),
+            "should have no conflict entries after resolve, got {}",
+            conflict_entries.len()
+        );
     }
 }

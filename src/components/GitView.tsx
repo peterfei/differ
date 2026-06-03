@@ -11,6 +11,7 @@ import { pendingRepoPath as navPendingRepoPath, setPendingRepoPath } from "../li
 interface GitViewProps {
   onOpenDiffView?: (left: string, right: string, base?: string) => void;
   onOpenMergeView?: (base: string, left: string, right: string) => void;
+  onOpenGitMergeView?: (repoPath: string, filePath: string) => void;
 }
 
 type ActivePanel = "status" | "history" | "branches";
@@ -202,21 +203,19 @@ export function GitView(props: GitViewProps) {
       const entry = statusEntries().find(e => e.path === path);
       const isConflicted = entry?.status === "Conflicted";
 
-      let result: DiffResult;
+      // For conflicted files, navigate to the merge view instead of showing diff
       if (isConflicted) {
-        result = await invoke<DiffResult>("git_diff_conflict", {
-          repoPath: repo.work_dir,
-          path: path,
-          options: { algorithm: "Myers", context_lines: 3, ignore_whitespace: false, ignore_case: false },
-        });
-      } else {
-        const cmd = staged ? "git_diff_staged" : "git_diff_unstaged";
-        result = await invoke<DiffResult>(cmd, {
-          repoPath: repo.work_dir,
-          path: path,
-          options: { algorithm: "Myers", context_lines: 3, ignore_whitespace: false, ignore_case: false },
-        });
+        props.onOpenGitMergeView?.(repo.work_dir, path);
+        setDiffLoading(false);
+        return;
       }
+
+      const cmd = staged ? "git_diff_staged" : "git_diff_unstaged";
+      result = await invoke<DiffResult>(cmd, {
+        repoPath: repo.work_dir,
+        path: path,
+        options: { algorithm: "Myers", context_lines: 3, ignore_whitespace: false, ignore_case: false },
+      });
       setSelectedDiff(result);
     } catch (e) {
       console.error("Failed to load diff:", e);
