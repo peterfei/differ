@@ -266,14 +266,14 @@ export function MergeView() {
       </Show>
 
       {/* Main content area */}
-      <Show when={result()}>
+      <Show when={result()} keyed>
         {(res) => (
           <>
             <Show when={viewMode() === 'source'}>
               <div class="flex-1 grid grid-cols-3 gap-0 overflow-hidden">
-                <MergePanel title="Base" text={res().base_text} emptyHint="Base 文件内容" />
-                <MergePanel title="Left" text={res().left_text} emptyHint="Left 分支内容" />
-                <MergePanel title="Right" text={res().right_text} emptyHint="Right 分支内容" />
+                <MergePanel title="Base" text={res.base_text} emptyHint="Base 文件内容" />
+                <MergePanel title="Left" text={res.left_text} emptyHint="Left 分支内容" />
+                <MergePanel title="Right" text={res.right_text} emptyHint="Right 分支内容" />
               </div>
             </Show>
 
@@ -281,8 +281,8 @@ export function MergeView() {
               <Show when={editing()} fallback={
                 <div class="flex-1 overflow-hidden">
                   <MergeResultPanel
-                    mergedText={res().merged_text}
-                    conflicts={res().conflicts}
+                    mergedText={res.merged_text}
+                    conflicts={res.conflicts}
                     selectedConflictIndex={selectedConflictIndex()}
                   />
                 </div>
