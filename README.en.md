@@ -12,6 +12,7 @@ A modern desktop application for file comparison and merging, built with Tauri v
 - **3-Way Merge** — Merge two file versions against a common base with conflict detection and resolution.
 - **Directory Comparison** — Recursively compare two directories, showing added, removed, and modified files in a tree view.
 - **Syntax-Aware Diff** — Powered by tree-sitter AST analysis, hunks are intelligently regrouped by function/class boundaries with context headers.
+- **Git Integration** — Open local repositories, view file changes, commit history, and branch management with interactive conflict resolution.
 - **Live File Watching** — Monitor files for changes and automatically re-run diff on save.
 - **History Tracking** — All diff and merge operations are persisted locally for quick access.
 - **Keyboard Navigation** — Full keyboard shortcuts for efficient workflow.
@@ -69,7 +70,8 @@ npm run tauri build
 1. **File Diff** — Open two files from the Dashboard or drag them in, view side-by-side changes.
 2. **Directory Diff** — Select two directories to see a recursive comparison tree.
 3. **3-Way Merge** — Provide a base file and two modified versions to merge with conflict resolution.
-4. **Syntax Mode** — Toggle between line-level and syntax-aware diff grouping for supported languages.
+4. **Git Integration** — Open local repositories, view changes, commit history, and branches; interactively resolve merge conflicts.
+5. **Syntax Mode** — Toggle between line-level and syntax-aware diff grouping for supported languages.
 
 ### Keyboard Shortcuts
 

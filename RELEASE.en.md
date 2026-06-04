@@ -2,6 +2,43 @@
 
 # Differ Release Notes
 
+## v0.2.0 — Git Integration & Interactive Merge
+
+### New Features
+
+#### Git Repository Integration
+- Open local Git repositories (path input, recent repos list, directory picker, drag & drop)
+- File changes panel — view working tree changes (added/modified/deleted/conflicted/renamed)
+- Commit history — paginated commit log with per-commit diff view
+- Branch management — view local branches, compare branches side-by-side
+- Interactive 3-way merge for conflicted files — click on conflicted file to enter merge view
+
+#### Interactive Merge Conflict Resolution
+- Three-pane panel showing Base / Ours / Theirs
+- Per-conflict navigation (previous/next)
+- "Adopt left" / "Adopt right" one-click resolution
+- Editable merge result area
+- Write to working tree and stage (git add) on save
+
+### Fixes
+- Fixed release build losing all styles (migrated Tailwind from CDN to local bundling)
+- Fixed stale line offset causing incomplete conflict resolution in multi-conflict merges
+- Fixed UI not updating after adoptSide due to SolidJS reactivity issue
+
+### Supported Languages (Syntax-Aware Diff)
+Same as v0.1.0: Rust, JavaScript/JSX, TypeScript/TSX, Python
+
+### Known Limitations
+- Same as v0.1.0; additionally: no git push/pull remote operations yet
+- Interactive merge does not support re-parsing manually edited conflict text yet
+
+### System Requirements
+- macOS 12.0+ (Tauri v2 minimum requirement)
+- 500MB disk space
+- 4GB RAM recommended for large file diffs
+
+---
+
 ## v0.1.0 (Initial Release)
 
 ### Features
