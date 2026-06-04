@@ -849,4 +849,5 @@ if __name__ == \"__main__\":
         // Both sides made changes at overlapping positions — conflict expected
         assert!(result.has_conflicts, "Expected conflicts but got none! Merged text:\n{}", result.merged_text);
     }
+
 }
