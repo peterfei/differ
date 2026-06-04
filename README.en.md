@@ -1,10 +1,12 @@
-**English** · [中文](README.md)
+<p align="center">
+  <img src="src-tauri/icons/icon_512x512@2x.png" width="256" height="256" alt="Differ Logo">
+</p>
 
 # Differ
 
-A modern desktop application for file comparison and merging, built with Tauri v2 and SolidJS.
+**English** · [中文](README.md)
 
-![screenshot](screenshot.png)
+A modern desktop application for file comparison and merging, built with Tauri v2 and SolidJS.
 
 <p align="center">
   <video src="https://raw.githubusercontent.com/peterfei/differ/main/public/Differ.mp4" width="800" controls autoplay loop muted>
