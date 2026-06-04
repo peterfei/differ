@@ -179,7 +179,7 @@ export function SettingsView() {
           <Section title="关于">
             <div class="text-xs text-slate-400 space-y-1">
               <p><span class="text-slate-500">应用:</span> Differ</p>
-              <p><span class="text-slate-500">版本:</span> 0.1.0</p>
+              <p><span class="text-slate-500">版本:</span> 0.2.0</p>
               <p><span class="text-slate-500">技术栈:</span> Tauri v2 + SolidJS + Rust</p>
             </div>
           </Section>

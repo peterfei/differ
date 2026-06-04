@@ -2,7 +2,7 @@ import { createSignal, For, Show, createMemo, createEffect, onMount, onCleanup }
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import type { DiffResult, DiffHunk, DiffChange, ChangeType } from "../types/diff";
 import { detectLanguage, highlightFile, type HighlightedLines } from "../lib/highlight";
-import { diffPaths as navDiffPaths } from "../lib/navStore";
+import { diffPaths as navDiffPaths, diffAction, setGoToLineActive } from "../lib/navStore";
 import { addHistoryEntry } from "../lib/historyStore";
 import { getSettings } from "../lib/settings";
 
@@ -76,7 +76,12 @@ export function DiffView(props: DiffViewProps) {
     }
   });
 
+  let rootRef: HTMLDivElement | undefined;
+
   onMount(async () => {
+    // 注册全局键盘快捷键（所有模式都需要）
+    document.addEventListener('keydown', handleDocumentKeyDown);
+
     // 外部模式不监听文件变更
     if (isExternalMode()) return;
     // Listen for file change events from the Rust backend
@@ -90,7 +95,69 @@ export function DiffView(props: DiffViewProps) {
     unlisten = un;
   });
 
+  // 全局键盘快捷键（不依赖 div 焦点）
+  function handleDocumentKeyDown(e: KeyboardEvent) {
+    // 组件不可见时忽略快捷键
+    if (!rootRef || rootRef.closest('[style*="display: none"]') || rootRef.closest('[style*="display:none"]')) return;
+
+    // J / K: 下一个/上一个 hunk
+    if (e.key === "j" || e.key === "J") {
+      nextHunk();
+      e.preventDefault();
+      return;
+    }
+    if (e.key === "k" || e.key === "K") {
+      prevHunk();
+      e.preventDefault();
+      return;
+    }
+    // Ctrl+G or Cmd+G: 跳转到行
+    if ((e.ctrlKey || e.metaKey) && e.key === "g") {
+      setGoToLine(true);
+      setTargetLine("");
+      e.preventDefault();
+      return;
+    }
+    // Enter in go-to-line: 跳转
+    if (e.key === "Enter" && goToLine()) {
+      const line = parseInt(targetLine());
+      if (!isNaN(line) && line > 0 && displayResult()) {
+        jumpToLine(line);
+      }
+      setGoToLine(false);
+      setTargetLine("");
+      e.preventDefault();
+      return;
+    }
+    // Ctrl+D or Cmd+D: 切换视图
+    if ((e.ctrlKey || e.metaKey) && e.key === "d") {
+      setViewMode((m) => (m === "side-by-side" ? "unified" : "side-by-side"));
+      e.preventDefault();
+      return;
+    }
+  }
+
+  // 监听全局 diffAction 信号（来自 App.tsx 的 Ctrl+S / Escape）
+  createEffect(() => {
+    const action = diffAction();
+    if (action?.type === 'toggleSyntax') {
+      setUseSyntax(s => !s);
+      // 如果有已加载的文件，重新执行 diff
+      if (leftPath()) runDiff();
+    }
+    if (action?.type === 'closeGoToLine') {
+      setGoToLine(false);
+      setTargetLine("");
+    }
+  });
+
+  // 同步 go-to-line 状态到 navStore（供 App.tsx Escape 处理判断）
+  createEffect(() => {
+    setGoToLineActive(goToLine());
+  });
+
   onCleanup(() => {
+    document.removeEventListener('keydown', handleDocumentKeyDown);
     unlisten?.();
     // Stop file watching when component unmounts
     unwatch();
@@ -134,44 +201,6 @@ export function DiffView(props: DiffViewProps) {
         ?.hunks.flatMap((h) => h.changes)
         .filter((c) => c.change_type === "Delete").length ?? 0
   );
-
-  function onKeyDown(e: KeyboardEvent) {
-    // J / K: 下一个/上一个 hunk
-    if (e.key === "j" || e.key === "J") {
-      nextHunk();
-      e.preventDefault();
-    }
-    if (e.key === "k" || e.key === "K") {
-      prevHunk();
-      e.preventDefault();
-    }
-    // Ctrl+G or Cmd+G: 跳转到行
-    if ((e.ctrlKey || e.metaKey) && e.key === "g") {
-      setGoToLine(true);
-      setTargetLine("");
-      e.preventDefault();
-    }
-    // Escape: 关闭跳转输入
-    if (e.key === "Escape") {
-      setGoToLine(false);
-      setTargetLine("");
-    }
-    // Enter in go-to-line: 跳转
-    if (e.key === "Enter" && goToLine()) {
-      const line = parseInt(targetLine());
-      if (!isNaN(line) && line > 0 && displayResult()) {
-        jumpToLine(line);
-      }
-      setGoToLine(false);
-      setTargetLine("");
-      e.preventDefault();
-    }
-    // Ctrl+D or Cmd+D: 切换视图
-    if ((e.ctrlKey || e.metaKey) && e.key === "d") {
-      setViewMode((m) => (m === "side-by-side" ? "unified" : "side-by-side"));
-      e.preventDefault();
-    }
-  }
 
   function jumpToLine(line: number) {
     const r = displayResult();
@@ -280,7 +309,7 @@ export function DiffView(props: DiffViewProps) {
   }
 
   return (
-    <div class="flex-1 flex flex-col overflow-hidden" tabIndex={-1} onKeyDown={onKeyDown} style={{ "outline": "none" }}>
+    <div ref={rootRef} class="flex-1 flex flex-col overflow-hidden" style={{ "outline": "none" }}>
       {/* Toolbar */}
       <div class="flex-shrink-0 bg-slate-900/60 border-b border-slate-800/50 px-4 py-2">
         <div class="flex items-center justify-between">
@@ -435,7 +464,7 @@ export function DiffView(props: DiffViewProps) {
       </Show>
 
       {/* Diff Content */}
-      <div class="flex-1 overflow-hidden relative" onClick={() => !goToLine() && document.querySelector('[tabIndex="-1"]')?.focus()}>
+      <div class="flex-1 overflow-hidden relative">
         <Show
           when={displayResult()}
           fallback={
