@@ -426,6 +426,8 @@ export function MergeView() {
 }
 
 // ── Pure helper: adopt one side of a conflict ──
+// NOTE: Must re-parse conflicts from current text to get accurate start_line
+// positions, because previous conflict resolutions shift line numbers.
 
 function adoptSide(
   res: MergeResult,
@@ -433,15 +435,25 @@ function adoptSide(
   conflictIdx: number,
   side: 'left' | 'right',
 ): { result: MergeResult; conflictCount: number } {
+  // Re-parse conflicts from current text to get accurate line positions
+  // (previous conflict resolutions shift subsequent conflicts' start_line)
+  const liveConflicts = parseConflictsFromText(res.merged_text);
+  const liveConflict = liveConflicts[conflictIdx];
+  if (!liveConflict) {
+    // Conflict not found in text — already resolved, return unchanged
+    return { result: res, conflictCount: res.conflicts.length };
+  }
+
   const lines = res.merged_text.split('\n');
-  const startLine = curr.start_line - 1;
+  const startLine = liveConflict.start_line - 1;
   const chosenContent = side === 'left' ? curr.left_content : curr.right_content;
   const markerLines = curr.left_content.length + curr.right_content.length + 3;
 
   lines.splice(startLine, markerLines, ...chosenContent);
   const newMergedText = lines.join('\n');
 
-  const newConflicts = res.conflicts.filter((_, i) => i !== conflictIdx);
+  // Re-parse conflicts from the result to get fresh positions
+  const newConflicts = parseConflictsFromText(newMergedText);
 
   return {
     result: {
