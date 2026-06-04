@@ -5,7 +5,7 @@ import { setDiffPaths } from "../lib/navStore";
 import type { HistoryEntry } from "../types/history";
 
 interface DashboardProps {
-  onNavigate: (view: "diff" | "merge" | "directory" | "history") => void;
+  onNavigate: (view: "diff" | "merge" | "directory" | "history" | "git") => void;
 }
 
 export function Dashboard(props: DashboardProps) {
@@ -67,9 +67,31 @@ export function Dashboard(props: DashboardProps) {
     <div class="flex-1 overflow-y-auto no-scrollbar">
       <div class="max-w-4xl mx-auto px-6 py-8">
         {/* Welcome header */}
-        <div class="mb-8">
-          <h1 class="text-xl font-bold text-slate-100 tracking-tight">仪表盘</h1>
-          <p class="text-[13px] text-slate-500 mt-1">快速开始文件对比、目录对比或三路合并</p>
+        <div class="flex items-center justify-between mb-8">
+          <div>
+            <h1 class="text-xl font-bold text-slate-100 tracking-tight">仪表盘</h1>
+            <p class="text-[13px] text-slate-500 mt-1">快速开始文件对比、目录对比或三路合并</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button
+              onClick={() => props.onNavigate("git")}
+              class="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white text-[11px] font-medium rounded-lg transition-colors shadow-lg shadow-cyan-600/20"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5" />
+              </svg>
+              打开仓库
+            </button>
+            <button
+              onClick={() => props.onNavigate("diff")}
+              class="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-medium rounded-lg transition-colors shadow-lg shadow-indigo-600/20"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+              </svg>
+              新对比
+            </button>
+          </div>
         </div>
 
         {/* Stats row */}
