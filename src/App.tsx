@@ -84,11 +84,11 @@ function App() {
         </div>
         <div class="flex-1 flex flex-col items-center gap-1 w-full px-2">
           <NavButton icon="grid" label="仪表盘" active={currentView() === 'dashboard'} onClick={() => setCurrentView('dashboard')} />
-          <NavButton icon="columns" label="文件对比" active={currentView() === 'diff' && diffMode() === 'file'} onClick={() => { setDiffMode('file'); setCurrentView('diff'); }} />
-          <NavButton icon="folder" label="目录对比" active={currentView() === 'diff' && diffMode() === 'directory'} onClick={openDirectoryDiff} />
+          <NavButton icon="columns" label="文件对比" active={currentView() === 'diff'} onClick={() => { setDiffMode('file'); setCurrentView('diff'); }} />
           <NavButton icon="merge" label="三路合并" active={currentView() === 'merge'} onClick={() => setCurrentView('merge')} />
-          <NavButton icon="clock" label="历史记录" active={currentView() === 'history'} onClick={() => setCurrentView('history')} />
+          <div class="w-6 h-px bg-slate-800/60 my-1" />
           <NavButton icon="git" label="Git" active={currentView() === 'git'} onClick={() => setCurrentView('git')} />
+          <NavButton icon="clock" label="操作历史" active={currentView() === 'history'} onClick={() => setCurrentView('history')} />
         </div>
         <NavButton icon="gear" label="设置" active={currentView() === 'settings'} onClick={() => setCurrentView('settings')} />
       </aside>
