@@ -1,8 +1,9 @@
+# Differ
 <p align="center">
   <img src="src-tauri/icons/icon_512x512@2x.png" width="256" height="256" alt="Differ Logo">
 </p>
 
-# Differ
+
 
 [English](README.en.md) · **中文**
 
