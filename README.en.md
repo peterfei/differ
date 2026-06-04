@@ -6,7 +6,7 @@ A modern desktop application for file comparison and merging, built with Tauri v
 
 ![screenshot](screenshot.png)
 
-<video src="https://raw.githubusercontent.com/peterfei/differ/main/public/Differ.mov" width="800" controls autoplay loop muted></video>
+<video src="https://raw.githubusercontent.com/peterfei/differ/main/public/Differ.mp4" width="800" controls autoplay loop muted></video>
 
 ## Features
 
