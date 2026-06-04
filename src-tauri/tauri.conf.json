@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicorde/tauri/refs/heads/dev/crates/tauri-config-schema/schema.json",
   "productName": "Differ",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "identifier": "com.differ.app",
   "build": {
     "frontendDist": "../dist",
