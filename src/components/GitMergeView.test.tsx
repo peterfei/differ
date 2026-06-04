@@ -48,7 +48,7 @@ const MOCK_CONFLICT_CONTENT: ConflictContent = {
 };
 
 // ── Fixture: consecutive_conflicts test fixture exact data ──
-// Matches the actual test fixture at test_fixtures/consecutive_conflicts/
+// Matches the actual test fixture at ~/Downloads/test_fixtures/consecutive_conflicts/
 // three_way_merge produces 5 granular conflicts for this fixture.
 
 const CONSECUTIVE_CONFLICT_CONTENT: ConflictContent = {
@@ -471,7 +471,7 @@ describe("GitMergeView adoptSide + smartMerge flow", () => {
 });
 
 // ── High-fidelity TDD test with consecutive_conflicts fixture ──
-// Uses the exact data from test_fixtures/consecutive_conflicts/ to
+// Uses the exact data from ~/Downloads/test_fixtures/consecutive_conflicts/ to
 // reproduce the user's bug: clicking "采用左侧" first works, then
 // clicking "采用右侧" doesn't change the rendered text.
 

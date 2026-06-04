@@ -156,9 +156,20 @@ export function GitMergeView(props: GitMergeViewProps) {
         path: props.filePath,
         content: res.merged_text,
       });
-      props.onBack();
+      // 使用 setTimeout 延迟 onBack 信号更新，避免 SolidJS 响应式
+      // 批处理时序问题（当前反应周期内修改信号导致异常）
+      setTimeout(() => props.onBack(), 0);
     } catch (e) {
       console.error("saveResolved failed:", e);
+      if (e && typeof e === 'object' && 'message' in (e as any)) {
+        console.error(`  message: ${(e as any).message}`);
+      }
+      if (e && typeof e === 'object' && 'code' in (e as any)) {
+        console.error(`  code: ${(e as any).code}`);
+      }
+      if (typeof e === 'string') {
+        console.error(`  raw string: "${e}"`);
+      }
     } finally {
       setSaving(false);
     }
