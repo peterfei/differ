@@ -7,6 +7,7 @@ import { GitSidebar } from "./GitSidebar";
 import { GitHistoryView } from "./GitHistoryView";
 import { GitBranchSelector } from "./GitBranchSelector";
 import { pendingRepoPath as navPendingRepoPath, setPendingRepoPath } from "../lib/navStore";
+import { openDirectoryDialog } from "../lib/dialog";
 
 interface GitViewProps {
   onOpenDiffView?: (left: string, right: string, base?: string) => void;
@@ -450,6 +451,13 @@ function RepoSelectionView(props: {
     }
   }
 
+  async function browseRepo() {
+    const dir = await openDirectoryDialog();
+    if (dir) {
+      props.onOpenPath(dir);
+    }
+  }
+
   return (
     <div
       class="flex-1 flex items-center justify-center relative"
@@ -499,6 +507,22 @@ function RepoSelectionView(props: {
             </Show>
           </button>
         </div>
+
+        {/* 添加已存在的本地仓库 */}
+        <div class="flex items-center gap-3 mt-4">
+          <div class="flex-1 h-px bg-slate-800/50" />
+          <span class="text-[10px] text-slate-600">或者</span>
+          <div class="flex-1 h-px bg-slate-800/50" />
+        </div>
+        <button
+          onClick={browseRepo}
+          class="mt-3 w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-800/40 hover:bg-slate-800/80 border border-dashed border-slate-700/50 hover:border-slate-600/50 rounded-lg transition-colors text-sm text-slate-300"
+        >
+          <svg class="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 10.5v6m3-3H9m4.06-7.19l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
+          </svg>
+          添加已存在的本地仓库
+        </button>
 
         <Show when={props.error}>
           <div class="mt-3 flex items-center gap-2 px-3 py-2 bg-red-950/50 border border-red-900/40 rounded-lg">
