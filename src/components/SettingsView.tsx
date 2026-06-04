@@ -9,6 +9,7 @@ export function SettingsView() {
     const s = await getSettings();
     setSettings(s);
     applyTheme(s.theme);
+    applyFont(s);
   });
 
   async function set<K extends keyof AppSettings>(key: K, value: AppSettings[K]) {
@@ -19,6 +20,7 @@ export function SettingsView() {
       const updated = await updateSettings({ [key]: value });
       setSettings(updated);
       if (key === "theme") applyTheme(value as AppSettings["theme"]);
+      if (key === "font_family" || key === "font_size") applyFont(updated);
     } finally {
       setSaving(false);
     }
@@ -35,6 +37,25 @@ export function SettingsView() {
       const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
       html.classList.toggle("dark", prefersDark);
     }
+  }
+
+  function applyFont(settings: AppSettings) {
+    const html = document.documentElement;
+    html.style.setProperty("--font-mono", `"${settings.font_family}", monospace`);
+    html.style.setProperty("--font-size-base", `${settings.font_size}px`);
+
+    // Inject/update a style tag to override font-mono classes
+    let styleEl = document.getElementById("differ-font-override");
+    if (!styleEl) {
+      styleEl = document.createElement("style");
+      styleEl.id = "differ-font-override";
+      document.head.appendChild(styleEl);
+    }
+    styleEl.textContent = `
+      .font-mono, code, pre, .line-numbers {
+        font-family: var(--font-mono, "JetBrains Mono", monospace) !important;
+      }
+    `;
   }
 
   const fontFamilies = [
