@@ -566,10 +566,13 @@ function MergeResultPanel(props: {
               {(line, i) => (
                 // classList is reactive — re-evaluates when memos change
                 <tr classList={{
-                  'bg-amber-950/30': allConflictLines().has(i()),
-                  'bg-amber-950/60': selectedConflictLines().has(i()),
+                  'bg-amber-900/35': allConflictLines().has(i()),
+                  'bg-amber-800/30': selectedConflictLines().has(i()),
                 }}>
-                  <td class="select-none text-right px-3 py-0 text-slate-600 w-12 border-r border-slate-800/30 align-top">
+                  <td classList={{
+                    'border-l-2 border-amber-500/70': selectedConflictLines().has(i()),
+                    'border-l-2 border-amber-700/40': !selectedConflictLines().has(i()) && allConflictLines().has(i()),
+                  }} class="select-none text-right px-3 py-0 text-slate-500 w-12 border-r border-slate-800/30 align-top">
                     {i() + 1}
                   </td>
                   <td class="px-3 py-0 whitespace-pre-wrap break-all align-top">
