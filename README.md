@@ -10,7 +10,7 @@
 一款现代化的文件对比与合并桌面应用，基于 Tauri v2 和 SolidJS 构建。
 
 <p align="center">
-  <video src="https://github.com/peterfei/differ/releases/download/v0.2.0/Differ.mp4" width="800" controls autoplay loop muted>
+  <video src="https://github.com/user-attachments/assets/d110bc04-b42c-4066-bab0-243ffd8a9632" width="800" controls autoplay loop muted>
     您的浏览器不支持 HTML5 视频。
   </video>
 </p>
