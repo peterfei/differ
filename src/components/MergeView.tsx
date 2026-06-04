@@ -168,7 +168,8 @@ export function MergeView() {
     pushUndo(res);
     setResult(newRes.result);
     setViewMode('merged');
-    setSelectedConflictIndex(Math.min(idx, newRes.conflictCount > 0 ? idx : Math.max(0, newRes.conflictCount - 1)));
+    // Clamp: when resolving the last conflict, idx may exceed newCount-1
+    setSelectedConflictIndex(Math.min(idx, Math.max(0, newRes.conflictCount - 1)));
   }
 
   function adoptRight() {
@@ -181,7 +182,8 @@ export function MergeView() {
     pushUndo(res);
     setResult(newRes.result);
     setViewMode('merged');
-    setSelectedConflictIndex(Math.min(idx, newRes.conflictCount > 0 ? idx : Math.max(0, newRes.conflictCount - 1)));
+    // Clamp: when resolving the last conflict, idx may exceed newCount-1
+    setSelectedConflictIndex(Math.min(idx, Math.max(0, newRes.conflictCount - 1)));
   }
 
   // Get conflict description
