@@ -1,10 +1,12 @@
+<p align="center">
+  <img src="src-tauri/icons/icon_512x512@2x.png" width="256" height="256" alt="Differ Logo">
+</p>
+
 # Differ
 
 [English](README.en.md) · **中文**
 
 一款现代化的文件对比与合并桌面应用，基于 Tauri v2 和 SolidJS 构建。
-
-![screenshot](screenshot.png)
 
 <p align="center">
   <video src="https://raw.githubusercontent.com/peterfei/differ/main/public/Differ.mp4" width="800" controls autoplay loop muted>
