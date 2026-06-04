@@ -6,7 +6,11 @@
 
 ![screenshot](screenshot.png)
 
-<video src="https://raw.githubusercontent.com/peterfei/differ/main/public/Differ.mp4" width="800" controls autoplay loop muted></video>
+<p align="center">
+  <video src="https://raw.githubusercontent.com/peterfei/differ/main/public/Differ.mp4" width="800" controls autoplay loop muted>
+    您的浏览器不支持 HTML5 视频。
+  </video>
+</p>
 
 ## 功能特性
 
