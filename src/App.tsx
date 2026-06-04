@@ -1,4 +1,4 @@
-import { createSignal, onMount } from 'solid-js';
+import { createSignal, onMount, onCleanup } from 'solid-js';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { DiffView } from './components/DiffView';
 import { Dashboard } from './components/Dashboard';
@@ -9,7 +9,7 @@ import { MergeView } from './components/MergeView';
 import { GitMergeView } from './components/GitMergeView';
 import { GitView } from './components/GitView';
 import { getSettings } from './lib/settings';
-import { gitConflictContext, setDiffPaths, setMergePaths, setGitConflictContext, setPendingRepoPath } from './lib/navStore';
+import { gitConflictContext, setDiffPaths, setMergePaths, setGitConflictContext, setPendingRepoPath, setDiffAction, goToLineActive } from './lib/navStore';
 
 type View = 'dashboard' | 'diff' | 'merge' | 'history' | 'git' | 'settings' | 'git-merge';
 type DiffMode = 'file' | 'directory';
@@ -17,6 +17,8 @@ type DiffMode = 'file' | 'directory';
 function App() {
   const [currentView, setCurrentView] = createSignal<View>('diff');
   const [diffMode, setDiffMode] = createSignal<DiffMode>('file');
+
+  let unlistenDrop: (() => void) | undefined;
 
   onMount(async () => {
     // 应用保存的主题设置
@@ -31,7 +33,7 @@ function App() {
     }
 
     // 设置 Tauri 原生拖放事件（HTML5 DragEvent 在 Tauri v2 webview 中不工作）
-    getCurrentWebview().onDragDropEvent((event) => {
+    const un = await getCurrentWebview().onDragDropEvent((event) => {
       if (event.payload.type === 'drop') {
         const paths = event.payload.paths;
         if (paths.length === 0) return;
@@ -40,7 +42,95 @@ function App() {
         discoverAndOpenRepo(paths[0]);
       }
     });
+    unlistenDrop = un;
+
+    // 全局键盘快捷键
+    document.addEventListener('keydown', globalKeyHandler);
   });
+
+  onCleanup(() => {
+    unlistenDrop?.();
+    document.removeEventListener('keydown', globalKeyHandler);
+  });
+
+  const views: View[] = ['dashboard', 'diff', 'merge', 'git', 'history', 'settings'];
+
+  function globalKeyHandler(e: KeyboardEvent) {
+    // 防止在输入框中触发快捷键
+    const tag = (e.target as HTMLElement)?.tagName;
+    const isInput = tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement)?.isContentEditable;
+    // Escape 在输入框中也需要工作（关闭对话框）
+    const isEscape = e.key === 'Escape';
+
+    if (isInput && !isEscape && !e.ctrlKey && !e.metaKey) return;
+
+    const view = currentView();
+    const cmd = e.ctrlKey || e.metaKey;
+
+    // Cmd+Shift+G: 打开 Git 视图
+    if (cmd && e.shiftKey && e.key === 'g') {
+      e.preventDefault();
+      setCurrentView('git');
+      return;
+    }
+
+    // Ctrl+N / Cmd+N: 新建对比
+    if (cmd && e.key === 'n') {
+      e.preventDefault();
+      setDiffMode('file');
+      setCurrentView('diff');
+      return;
+    }
+
+    // Ctrl+W / Cmd+W: 关闭标签（返回仪表盘）
+    if (cmd && e.key === 'w') {
+      e.preventDefault();
+      if (view === 'git-merge') {
+        setGitConflictContext(null);
+        setCurrentView('git');
+      } else if (view !== 'dashboard') {
+        setCurrentView('dashboard');
+      }
+      return;
+    }
+
+    // Ctrl+Tab / Cmd+Tab: 下一个视图（Cmd+Shift+Tab 上一个）
+    if (cmd && e.key === 'Tab') {
+      e.preventDefault();
+      const idx = views.indexOf(view);
+      const dir = e.shiftKey ? -1 : 1;
+      setCurrentView(views[(idx + dir + views.length) % views.length]);
+      return;
+    }
+
+    // Ctrl+S / Cmd+S: 切换语法模式（仅在 diff 视图）
+    if (cmd && e.key === 's') {
+      e.preventDefault();
+      if (view === 'diff') {
+        setDiffAction({ type: 'toggleSyntax' });
+      }
+      return;
+    }
+
+    // Escape: 返回导航 / 关闭对话框
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      // 优先关闭 DiffView 的跳转到行对话框
+      if (goToLineActive()) {
+        setDiffAction({ type: 'closeGoToLine' });
+        return;
+      }
+      // 按视图层级返回
+      if (view === 'git-merge') {
+        setGitConflictContext(null);
+        setCurrentView('git');
+      } else if (view === 'diff' || view === 'merge' || view === 'history' || view === 'settings') {
+        setCurrentView('dashboard');
+      }
+      // dashboard 和 git 视图不处理 Escape（让组件自己处理）
+      return;
+    }
+  }
 
   function openFileDiff(left: string, right: string, base?: string) {
     setDiffPaths({ left, right, base });
@@ -97,7 +187,7 @@ function App() {
         <header class="flex-shrink-0 h-12 bg-slate-900/80 border-b border-slate-800/60 flex items-center justify-between px-4">
           <div class="flex items-center gap-3">
             <span class="text-sm font-semibold text-slate-100 tracking-tight">Differ</span>
-            <span class="text-[10px] font-medium text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded">v0.1.0</span>
+            <span class="text-[10px] font-medium text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded">v0.2.0</span>
           </div>
         </header>
 

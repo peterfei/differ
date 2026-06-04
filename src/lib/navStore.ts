@@ -14,3 +14,9 @@ export const [gitConflictContext, setGitConflictContext] = createSignal<{
 
 /** 跨组件导航：自动发现仓库后跳转到 Git 视图 */
 export const [pendingRepoPath, setPendingRepoPath] = createSignal<string | null>(null);
+
+/** 全局快捷键触发的 DiffView 动作（Ctrl+S 语法切换等） */
+export const [diffAction, setDiffAction] = createSignal<{ type: string; payload?: unknown } | null>(null);
+
+/** DiffView 的跳转到行对话框状态（供 App.tsx 的 Escape 处理判断） */
+export const [goToLineActive, setGoToLineActive] = createSignal(false);
