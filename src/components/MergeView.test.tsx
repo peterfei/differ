@@ -196,6 +196,181 @@ describe('MergeView', () => {
     });
   });
 
+  // ── adoptSide reactivity test (TDD: RED phase) ──
+
+  it('adoptLeft removes conflict markers from rendered text and updates conflict bar', async () => {
+    mockOpenDialog.mockResolvedValue('/tmp/f.txt');
+    mockInvoke.mockResolvedValue({
+      merged_text: [
+        'line1',
+        '<<<<<<< Left',
+        'LEFT CONTENT',
+        '=======',
+        'RIGHT CONTENT',
+        '>>>>>>> Right',
+        'line3',
+      ].join('\n'),
+      conflicts: [{
+        left_content: ['LEFT CONTENT'],
+        right_content: ['RIGHT CONTENT'],
+        start_line: 2,
+      }],
+      has_conflicts: true,
+      base_text: 'base\ncontent\nhere',
+      left_text: 'left\ncontent\nhere',
+      right_text: 'right\ncontent\nhere',
+    } satisfies MergeResult);
+
+    render(() => <MergeView />);
+
+    // Select all three files
+    const fileBtns = screen.getAllByRole('button').filter(b =>
+      b.textContent?.includes('选择文件...')
+    );
+    for (const btn of fileBtns) {
+      fireEvent.click(btn);
+    }
+    await vi.waitFor(() => expect(mockOpenDialog).toHaveBeenCalledTimes(3));
+
+    // Click merge
+    fireEvent.click(screen.getByText('合并'));
+    await vi.waitFor(() => expect(mockInvoke).toHaveBeenCalled());
+
+    // Wait for conflict bar and markers to appear
+    await vi.waitFor(() => {
+      expect(screen.getByText(/冲突 #1/)).toBeInTheDocument();
+      expect(screen.getByText('<<<<<<< Left')).toBeInTheDocument();
+    });
+
+    // Act: click "采用左侧"
+    fireEvent.click(screen.getByText('采用左侧'));
+
+    // Assert: "<<<<<<< Left" should be gone from rendered text
+    await vi.waitFor(() => {
+      expect(screen.queryByText('<<<<<<< Left')).not.toBeInTheDocument();
+    }, { timeout: 3000 });
+
+    // Assert: conflict bar should show "所有冲突已解决" (all conflicts resolved)
+    await vi.waitFor(() => {
+      expect(screen.getByText('所有冲突已解决')).toBeInTheDocument();
+    }, { timeout: 3000 });
+  });
+
+  it('adoptRight removes conflict markers from rendered text and updates conflict bar', async () => {
+    mockOpenDialog.mockResolvedValue('/tmp/f.txt');
+    mockInvoke.mockResolvedValue({
+      merged_text: [
+        'line1',
+        '<<<<<<< Left',
+        'LEFT CONTENT',
+        '=======',
+        'RIGHT CONTENT',
+        '>>>>>>> Right',
+        'line3',
+      ].join('\n'),
+      conflicts: [{
+        left_content: ['LEFT CONTENT'],
+        right_content: ['RIGHT CONTENT'],
+        start_line: 2,
+      }],
+      has_conflicts: true,
+      base_text: 'base\ncontent\nhere',
+      left_text: 'left\ncontent\nhere',
+      right_text: 'right\ncontent\nhere',
+    } satisfies MergeResult);
+
+    render(() => <MergeView />);
+
+    // Select all three files
+    const fileBtns = screen.getAllByRole('button').filter(b =>
+      b.textContent?.includes('选择文件...')
+    );
+    for (const btn of fileBtns) {
+      fireEvent.click(btn);
+    }
+    await vi.waitFor(() => expect(mockOpenDialog).toHaveBeenCalledTimes(3));
+
+    // Click merge
+    fireEvent.click(screen.getByText('合并'));
+    await vi.waitFor(() => expect(mockInvoke).toHaveBeenCalled());
+
+    // Wait for conflict bar and markers
+    await vi.waitFor(() => {
+      expect(screen.getByText(/冲突 #1/)).toBeInTheDocument();
+      expect(screen.getByText('<<<<<<< Left')).toBeInTheDocument();
+    });
+
+    // Act: click "采用右侧"
+    fireEvent.click(screen.getByText('采用右侧'));
+
+    // Assert: "<<<<<<< Left" should be gone from rendered text
+    await vi.waitFor(() => {
+      expect(screen.queryByText('<<<<<<< Left')).not.toBeInTheDocument();
+    }, { timeout: 3000 });
+  });
+
+  it('adoptLeft updates conflict count in conflict bar', async () => {
+    mockOpenDialog.mockResolvedValue('/tmp/f.txt');
+    mockInvoke.mockResolvedValue({
+      merged_text: [
+        'line1',
+        '<<<<<<< Left',
+        'FIRST LEFT',
+        '=======',
+        'FIRST RIGHT',
+        '>>>>>>> Right',
+        'middle',
+        '<<<<<<< Left',
+        'SECOND LEFT',
+        '=======',
+        'SECOND RIGHT',
+        '>>>>>>> Right',
+        'line3',
+      ].join('\n'),
+      conflicts: [
+        { left_content: ['FIRST LEFT'], right_content: ['FIRST RIGHT'], start_line: 2 },
+        { left_content: ['SECOND LEFT'], right_content: ['SECOND RIGHT'], start_line: 8 },
+      ],
+      has_conflicts: true,
+      base_text: 'base\ncontent',
+      left_text: 'left\ncontent',
+      right_text: 'right\ncontent',
+    } satisfies MergeResult);
+
+    render(() => <MergeView />);
+
+    // Select all three files
+    const fileBtns = screen.getAllByRole('button').filter(b =>
+      b.textContent?.includes('选择文件...')
+    );
+    for (const btn of fileBtns) {
+      fireEvent.click(btn);
+    }
+    await vi.waitFor(() => expect(mockOpenDialog).toHaveBeenCalledTimes(3));
+
+    // Click merge
+    fireEvent.click(screen.getByText('合并'));
+    await vi.waitFor(() => expect(mockInvoke).toHaveBeenCalled());
+
+    // Wait for conflict bar with 2 conflicts
+    await vi.waitFor(() => {
+      expect(screen.getByText(/冲突 #1/)).toBeInTheDocument();
+      expect(screen.getByText('/ 2')).toBeInTheDocument();
+      // Verify both conflict markers are present
+      expect(screen.getAllByText('<<<<<<< Left')).toHaveLength(2);
+    });
+
+    // Act: resolve first conflict
+    fireEvent.click(screen.getByText('采用左侧'));
+
+    // Assert: conflict count should update to 1 remaining
+    await vi.waitFor(() => {
+      expect(screen.getByText(/冲突 #1/)).toBeInTheDocument();
+      expect(screen.getByText('/ 1')).toBeInTheDocument();
+      expect(screen.getAllByText('<<<<<<< Left')).toHaveLength(1);
+    }, { timeout: 3000 });
+  });
+
   it('shows save button when conflicts are resolved', async () => {
     mockOpenDialog.mockResolvedValue('/tmp/f.txt');
     mockInvoke.mockResolvedValue({
