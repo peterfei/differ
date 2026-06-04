@@ -21,6 +21,8 @@ export function GitMergeView(props: GitMergeViewProps) {
   const [editText, setEditText] = createSignal("");
   const [resolvedConflicts, setResolvedConflicts] = createSignal<Set<number>>(new Set());
   const [localMergeResult, setLocalMergeResult] = createSignal<MergeResult | null>(null);
+  const [smartMergeError, setSmartMergeError] = createSignal<string | null>(null);
+  const [smartMergeFeedback, setSmartMergeFeedback] = createSignal<string | null>(null);
 
   // ── Data loading via createResource ──
   // SolidJS's official async data primitive: signal updates from the fetcher
@@ -93,27 +95,48 @@ export function GitMergeView(props: GitMergeViewProps) {
   }
 
   function smartMerge() {
-    const d = data();
-    if (!d) return;
+    const res = localMergeResult();
+    if (!res || res.conflicts.length === 0) return;
+    setSmartMergeError(null);
+    setSmartMergeFeedback(null);
     setSaving(true);
-    setSelectedConflictIdx(0);
-    setResolvedConflicts(new Set<number>());
     setEditing(false);
-    invoke<MergeResult>("merge_text", {
-      baseText: d.conflictContent.base_text,
-      leftText: d.conflictContent.ours_text,
-      rightText: d.conflictContent.theirs_text,
-    })
-      .then((result) => {
-        setLocalMergeResult(result);
-        setEditText(result.merged_text);
-      })
-      .catch((e) => {
-        console.error("smartMerge failed:", e);
-      })
-      .finally(() => {
-        setSaving(false);
-      });
+
+    try {
+      // Auto-resolve all conflicts by adopting "ours" (left) side
+      // Process in reverse order to preserve line numbers
+      let text = res.merged_text;
+      const sorted = [...res.conflicts].sort((a, b) => b.start_line - a.start_line);
+
+      for (const conflict of sorted) {
+        const lines = text.split("\n");
+        const startIdx = conflict.start_line - 1; // 0-based
+
+        // Find the >>>>>>> line
+        let endIdx = startIdx;
+        while (endIdx < lines.length && !lines[endIdx].startsWith(">>>>>>>")) {
+          endIdx++;
+        }
+        if (endIdx < lines.length) endIdx++; // include the >>>>>>> line
+
+        // Rebuild: before + left_content + after
+        const before = lines.slice(0, startIdx);
+        const after = lines.slice(endIdx);
+        text = [...before, ...conflict.left_content, ...after].join("\n");
+      }
+
+      setLocalMergeResult({ ...res, merged_text: text, conflicts: [] });
+      setEditText(text);
+      setSelectedConflictIdx(0);
+      setResolvedConflicts(new Set<number>());
+      setSmartMergeFeedback("已自动解决全部冲突");
+      setTimeout(() => setSmartMergeFeedback(null), 2500);
+    } catch (e) {
+      console.error("smartMerge failed:", e);
+      setSmartMergeError(String(e));
+    } finally {
+      setSaving(false);
+    }
   }
 
   function startEditing() {
@@ -220,6 +243,8 @@ export function GitMergeView(props: GitMergeViewProps) {
               selectedConflictIdx,
               resolvedConflicts,
               isSaving,
+              smartMergeError,
+              smartMergeFeedback,
               mergeText,
               editing_,
               props,
@@ -252,6 +277,8 @@ function renderMergeUI(
   selectedConflictIdx: () => number,
   resolvedConflicts: () => Set<number>,
   isSaving: () => boolean,
+  smartMergeError: () => string | null,
+  smartMergeFeedback: () => string | null,
   mergeText: () => string,
   editing: () => boolean,
   props: GitMergeViewProps,
@@ -410,7 +437,20 @@ function renderMergeUI(
               <div class="w-px h-4 bg-slate-700/40 mx-0.5" />
               <button onClick={() => adoptSide("left")} disabled={resolvedConflicts().has(currentIdx)} class="px-2 py-0.5 text-[10px] font-medium text-emerald-400 bg-emerald-500/10 rounded-md hover:bg-emerald-500/20 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">采用左侧</button>
               <button onClick={() => adoptSide("right")} disabled={resolvedConflicts().has(currentIdx)} class="px-2 py-0.5 text-[10px] font-medium text-red-400 bg-red-500/10 rounded-md hover:bg-red-500/20 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">采用右侧</button>
-              <button onClick={smartMerge} disabled={isSaving()} class="px-2 py-0.5 text-[10px] font-medium text-indigo-400 bg-indigo-500/10 rounded-md hover:bg-indigo-500/20 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">智能合并</button>
+              <button onClick={smartMerge} disabled={isSaving()} class="px-2 py-0.5 text-[10px] font-medium text-indigo-400 bg-indigo-500/10 rounded-md hover:bg-indigo-500/20 disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center gap-1">
+                {isSaving() ? (
+                  <div class="w-3 h-3 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+                ) : null}
+                智能合并
+              </button>
+              <Show when={smartMergeError()}>
+                <span class="text-[10px] text-red-400 ml-1 max-w-[200px] truncate" title={smartMergeError()!}>
+                  错误: {smartMergeError()}
+                </span>
+              </Show>
+              <Show when={smartMergeFeedback()}>
+                <span class="text-[10px] text-emerald-400 ml-1 animate-pulse">{smartMergeFeedback()}</span>
+              </Show>
               <button onClick={editing() ? finishEditing : startEditing} class="px-2 py-0.5 text-[10px] font-medium text-slate-400 bg-slate-800/60 rounded-md hover:bg-slate-700/60 transition-colors">{editing() ? "完成编辑" : "手动编辑"}</button>
             </div>
           </div>
