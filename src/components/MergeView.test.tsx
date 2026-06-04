@@ -371,6 +371,76 @@ describe('MergeView', () => {
     }, { timeout: 3000 });
   });
 
+  it('resolves multiple conflicts sequentially without stale line numbers', async () => {
+    // Simulates the user's config-file scenario: resolving the first conflict
+    // shifts subsequent conflict positions. The old code used stale start_line
+    // values, causing the second splice to hit the wrong position.
+    mockOpenDialog.mockResolvedValue('/tmp/f.txt');
+    mockInvoke.mockResolvedValue({
+      merged_text: [
+        '# Server',
+        'server.host=127.0.0.1',
+        '',
+        '# Database',
+        '<<<<<<< Left',
+        'db.host=127.0.0.1',
+        '=======',
+        'db.host=db.internal',
+        '>>>>>>> Right',
+        'db.port=5432',
+        '',
+        '# Cache',
+        '<<<<<<< Left',
+        'cache.host=127.0.0.1',
+        '=======',
+        'cache.host=redis.internal',
+        '>>>>>>> Right',
+        'cache.port=6379',
+      ].join('\n'),
+      conflicts: [
+        { left_content: ['db.host=127.0.0.1'], right_content: ['db.host=db.internal'], start_line: 5 },
+        { left_content: ['cache.host=127.0.0.1'], right_content: ['cache.host=redis.internal'], start_line: 13 },
+      ],
+      has_conflicts: true,
+      base_text: 'base',
+      left_text: 'left',
+      right_text: 'right',
+    } satisfies MergeResult);
+
+    render(() => <MergeView />);
+
+    // Select files and merge
+    const fileBtns = screen.getAllByRole('button').filter(b =>
+      b.textContent?.includes('选择文件...')
+    );
+    for (const btn of fileBtns) fireEvent.click(btn);
+    await vi.waitFor(() => expect(mockOpenDialog).toHaveBeenCalledTimes(3));
+    fireEvent.click(screen.getByText('合并'));
+    await vi.waitFor(() => expect(mockInvoke).toHaveBeenCalled());
+
+    // Wait for both conflict markers
+    await vi.waitFor(() => {
+      expect(screen.getAllByText('<<<<<<< Left')).toHaveLength(2);
+    });
+
+    // Step 1: Resolve first conflict (Database)
+    fireEvent.click(screen.getByText('采用左侧'));
+    await vi.waitFor(() => {
+      expect(screen.getAllByText('<<<<<<< Left')).toHaveLength(1);
+      expect(screen.getByText('/ 1')).toBeInTheDocument();
+    }, { timeout: 3000 });
+
+    // Step 2: Resolve second conflict (Cache)
+    // If start_line is stale, splice would miss and markers would remain
+    fireEvent.click(screen.getByText('采用左侧'));
+    await vi.waitFor(() => {
+      expect(screen.queryByText('<<<<<<< Left')).not.toBeInTheDocument();
+      expect(screen.getByText('所有冲突已解决')).toBeInTheDocument();
+      // Verify no ======= or >>>>>>> markers remain either
+      expect(screen.queryByText('=======')).not.toBeInTheDocument();
+    }, { timeout: 3000 });
+  });
+
   it('shows save button when conflicts are resolved', async () => {
     mockOpenDialog.mockResolvedValue('/tmp/f.txt');
     mockInvoke.mockResolvedValue({
