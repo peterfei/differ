@@ -167,10 +167,8 @@ function App() {
   return (
     <div class="flex h-screen overflow-hidden">
       <aside class="w-16 flex-shrink-0 bg-slate-900/80 border-r border-slate-800/60 flex flex-col items-center py-3 gap-1 z-10">
-        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center mb-2 shadow-lg shadow-indigo-500/20">
-          <svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16m-7 6h7" />
-          </svg>
+        <div class="w-9 h-9 rounded-xl flex items-center justify-center mb-2">
+          <img src="/icon.png" class="w-8 h-8 rounded-lg" alt="Differ" />
         </div>
         <div class="flex-1 flex flex-col items-center gap-1 w-full px-2">
           <NavButton icon="grid" label="仪表盘" active={currentView() === 'dashboard'} onClick={() => setCurrentView('dashboard')} />
