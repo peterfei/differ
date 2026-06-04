@@ -47,6 +47,133 @@ const MOCK_CONFLICT_CONTENT: ConflictContent = {
   file_path: "app.py",
 };
 
+// ── Fixture: consecutive_conflicts test fixture exact data ──
+// Matches the actual test fixture at test_fixtures/consecutive_conflicts/
+// three_way_merge produces 5 granular conflicts for this fixture.
+
+const CONSECUTIVE_CONFLICT_CONTENT: ConflictContent = {
+  base_text: [
+    '# Server Configuration',
+    'server.host=localhost',
+    'server.port=8080',
+    '',
+    '# Database Configuration',
+    'db.host=localhost',
+    'db.port=5432',
+    'db.name=appdb',
+    'db.user=admin',
+    '',
+    '# Cache Configuration',
+    'cache.host=localhost',
+    'cache.port=6379',
+    'cache.ttl=3600',
+    '',
+    '# Logging Configuration',
+    'log.level=info',
+    'log.file=/var/log/app.log',
+    'log.format=text',
+  ].join('\n'),
+  ours_text: [
+    '# Server Configuration',
+    'server.host=127.0.0.1',
+    'server.port=8080',
+    '',
+    '# Database Configuration',
+    'db.host=127.0.0.1',
+    'db.port=5432',
+    'db.name=appdb_dev',
+    'db.user=root',
+    '',
+    '# Cache Configuration',
+    'cache.host=127.0.0.1',
+    'cache.port=6379',
+    'cache.ttl=3600',
+    '',
+    '# Logging Configuration',
+    'log.level=warn',
+    'log.file=/var/log/app.log',
+    'log.format=text',
+  ].join('\n'),
+  theirs_text: [
+    '# Server Configuration',
+    'server.host=0.0.0.0',
+    'server.port=9000',
+    '',
+    '# Database Configuration',
+    'db.host=db.internal',
+    'db.port=5432',
+    'db.name=appdb_prod',
+    'db.user=app_user',
+    '',
+    '# Cache Configuration',
+    'cache.host=redis.internal',
+    'cache.port=6379',
+    'cache.ttl=7200',
+    '',
+    '# Logging Configuration',
+    'log.level=debug',
+    'log.file=/var/log/app.log',
+    'log.format=json',
+  ].join('\n'),
+  file_path: "config.txt",
+};
+
+const CONSECUTIVE_MERGE_RESULT: MergeResult = {
+  merged_text: [
+    '# Server Configuration',
+    '<<<<<<< Left',
+    'server.host=127.0.0.1',
+    '=======',
+    'server.host=0.0.0.0',
+    'server.port=9000',
+    '>>>>>>> Right',
+    '',
+    '# Database Configuration',
+    '<<<<<<< Left',
+    'db.host=127.0.0.1',
+    '=======',
+    'db.host=db.internal',
+    '>>>>>>> Right',
+    'db.port=5432',
+    '<<<<<<< Left',
+    'db.name=appdb_dev',
+    'db.user=root',
+    '=======',
+    'db.name=appdb_prod',
+    'db.user=app_user',
+    '>>>>>>> Right',
+    '',
+    '# Cache Configuration',
+    '<<<<<<< Left',
+    'cache.host=127.0.0.1',
+    '=======',
+    'cache.host=redis.internal',
+    '>>>>>>> Right',
+    'cache.port=6379',
+    'cache.ttl=7200',
+    '',
+    '# Logging Configuration',
+    '<<<<<<< Left',
+    'log.level=warn',
+    '=======',
+    'log.level=debug',
+    '>>>>>>> Right',
+    'log.file=/var/log/app.log',
+    'log.format=json',
+  ].join('\n'),
+  conflicts: [
+    { left_content: ['server.host=127.0.0.1'], right_content: ['server.host=0.0.0.0', 'server.port=9000'], start_line: 2 },
+    { left_content: ['db.host=127.0.0.1'], right_content: ['db.host=db.internal'], start_line: 10 },
+    { left_content: ['db.name=appdb_dev', 'db.user=root'], right_content: ['db.name=appdb_prod', 'db.user=app_user'], start_line: 16 },
+    { left_content: ['cache.host=127.0.0.1'], right_content: ['cache.host=redis.internal'], start_line: 25 },
+    { left_content: ['log.level=warn'], right_content: ['log.level=debug'], start_line: 34 },
+  ],
+  has_conflicts: true,
+  base_text: '',
+  left_text: '',
+  right_text: '',
+};
+
 const MOCK_MERGE_RESULT: MergeResult = {
   merged_text: [
     'def hello():',
@@ -264,6 +391,49 @@ describe("GitMergeView adoptSide + smartMerge flow", () => {
   );
 
   it(
+    "adoptSide resolves conflicts sequentially without stale index bug",
+    { timeout: 10000 },
+    async () => {
+      render(() => (
+        <GitMergeView
+          repoPath="/tmp/test-repo"
+          filePath="app.py"
+          onBack={() => {}}
+        />
+      ));
+
+      // Wait for loading to finish
+      await waitFor(
+        () => {
+          expect(screen.queryByText("加载合并冲突...")).not.toBeInTheDocument();
+        },
+        { timeout: 5000 },
+      );
+
+      // Assert: initial state has 2 conflict markers
+      expect(screen.getAllByText("<<<<<<< Left")).toHaveLength(2);
+
+      // Step 1: Resolve first conflict with "采用左侧"
+      screen.getByText("采用左侧").click();
+      await vi.waitFor(() => {
+        expect(screen.getAllByText("<<<<<<< Left")).toHaveLength(1);
+        // Must NOT show "已全部解决" — 1 conflict remains
+        expect(screen.queryByText("已全部解决")).not.toBeInTheDocument();
+        // Must show "1 个冲突" (not "0 个冲突")
+        expect(screen.getByText("1 个冲突")).toBeInTheDocument();
+      }, { timeout: 3000 });
+
+      // Step 2: Resolve second conflict with "采用左侧"
+      screen.getByText("采用左侧").click();
+      await vi.waitFor(() => {
+        expect(screen.queryAllByText("<<<<<<< Left")).toHaveLength(0);
+        // After all conflicts resolved, show "无冲突"
+        expect(screen.getByText("无冲突")).toBeInTheDocument();
+      }, { timeout: 3000 });
+    },
+  );
+
+  it(
     "smartMerge resolves all conflict markers when there are unresolved conflicts",
     { timeout: 10000 },
     async () => {
@@ -296,6 +466,108 @@ describe("GitMergeView adoptSide + smartMerge flow", () => {
         },
         { timeout: 5000 },
       );
+    },
+  );
+});
+
+// ── High-fidelity TDD test with consecutive_conflicts fixture ──
+// Uses the exact data from test_fixtures/consecutive_conflicts/ to
+// reproduce the user's bug: clicking "采用左侧" first works, then
+// clicking "采用右侧" doesn't change the rendered text.
+
+describe("GitMergeView consecutive_conflicts fixture", () => {
+  beforeEach(() => {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === "git_get_conflict_content") return Promise.resolve(CONSECUTIVE_CONFLICT_CONTENT);
+      if (cmd === "merge_text") return Promise.resolve(CONSECUTIVE_MERGE_RESULT);
+      return Promise.reject(new Error(`Unknown command: ${cmd}`));
+    });
+  });
+
+  afterEach(() => {
+    mockInvoke.mockImplementation(() => new Promise(() => {}));
+  });
+
+  it(
+    "adoptLeft then adoptRight resolves two consecutive conflicts in sequence",
+    { timeout: 10000 },
+    async () => {
+      render(() => (
+        <GitMergeView
+          repoPath="/tmp/test-repo"
+          filePath="config.txt"
+          onBack={() => {}}
+        />
+      ));
+
+      // Wait for loading to finish
+      await waitFor(
+        () => {
+          expect(screen.queryByText("加载合并冲突...")).not.toBeInTheDocument();
+        },
+        { timeout: 5000 },
+      );
+
+      // Assert: initial state has 5 conflict markers
+      const textContent = () => screen.getAllByText("<<<<<<< Left");
+      expect(textContent()).toHaveLength(5);
+
+      // Step 1: Resolve first conflict with "采用左侧"
+      screen.getByText("采用左侧").click();
+
+      // After first resolution: 4 conflicts remain
+      await vi.waitFor(() => {
+        expect(screen.getAllByText("<<<<<<< Left")).toHaveLength(4);
+      }, { timeout: 3000 });
+
+      // Step 2: Resolve next conflict with "采用右侧"
+      screen.getByText("采用右侧").click();
+
+      // After second resolution: 3 conflicts remain (NOT still 4!)
+      await vi.waitFor(() => {
+        expect(screen.getAllByText("<<<<<<< Left")).toHaveLength(3);
+      }, { timeout: 3000 });
+    },
+  );
+
+  it(
+    "adoptLeft then adoptRight all the way to resolution with consecutive_conflicts fixture",
+    { timeout: 15000 },
+    async () => {
+      render(() => (
+        <GitMergeView
+          repoPath="/tmp/test-repo"
+          filePath="config.txt"
+          onBack={() => {}}
+        />
+      ));
+
+      await waitFor(
+        () => {
+          expect(screen.queryByText("加载合并冲突...")).not.toBeInTheDocument();
+        },
+        { timeout: 5000 },
+      );
+
+      // Initial: 5 conflicts
+      expect(screen.getAllByText("<<<<<<< Left")).toHaveLength(5);
+
+      // Resolve all 5 conflicts by alternating left/right
+      const clicks = ["采用左侧", "采用右侧", "采用左侧", "采用右侧", "采用左侧"];
+      for (let i = 0; i < clicks.length; i++) {
+        screen.getByText(clicks[i]).click();
+        const remaining = 5 - i - 1;
+        if (remaining > 0) {
+          await vi.waitFor(() => {
+            expect(screen.getAllByText("<<<<<<< Left")).toHaveLength(remaining);
+          }, { timeout: 3000 });
+        } else {
+          await vi.waitFor(() => {
+            expect(screen.queryAllByText("<<<<<<< Left")).toHaveLength(0);
+            expect(screen.getByText("无冲突")).toBeInTheDocument();
+          }, { timeout: 3000 });
+        }
+      }
     },
   );
 });

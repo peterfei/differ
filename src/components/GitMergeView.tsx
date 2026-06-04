@@ -82,15 +82,19 @@ export function GitMergeView(props: GitMergeViewProps) {
     const newText = newLines.join("\n");
 
     const newConflicts = parseConflictsFromText(newText);
-    const newResolved = new Set<number>(resolvedConflicts());
-    newResolved.add(idx);
 
     setLocalMergeResult({ ...res, merged_text: newText, conflicts: newConflicts });
-    setResolvedConflicts(newResolved);
+    // Clear resolved tracking — old indices are stale after re-parsing.
+    // The source of truth is the text: remaining conflicts are all unresolved.
+    setResolvedConflicts(new Set<number>());
     setEditText(newText);
 
-    if (idx < newConflicts.length - 1 && !newResolved.has(idx + 1)) {
+    if (idx < newConflicts.length - 1) {
       setSelectedConflictIdx(idx + 1);
+    } else {
+      // Clamp to valid range — when resolving the last conflict in the old
+      // array, newConflicts.length = oldLength - 1, so idx may be OOB.
+      setSelectedConflictIdx(Math.max(0, newConflicts.length - 1));
     }
   }
 
@@ -236,30 +240,38 @@ export function GitMergeView(props: GitMergeViewProps) {
           }
         >
           {/* Merge UI — rendered only when data and localMergeResult are ready */}
-          <Show when={data() && localMergeResult()}>
-            {renderMergeUI(
-              data()!.conflictContent,
-              localMergeResult()!,
-              selectedConflictIdx,
-              resolvedConflicts,
-              isSaving,
-              smartMergeError,
-              smartMergeFeedback,
-              mergeText,
-              editing_,
-              props,
-              setSelectedConflictIdx,
-              setResolvedConflicts,
-              setLocalMergeResult,
-              setEditing,
-              setEditText,
-              setSaving,
-              adoptSide,
-              smartMerge,
-              startEditing,
-              finishEditing,
-              saveResolved,
-            )}
+          {/* CRITICAL: keyed is required! Without it, <Show> uses truthiness */}
+          {/* equality (!!a === !!b), so when localMergeResult changes from one */}
+          {/* truthy MergeResult to another, children don't re-render and the */}
+          {/* merge text never updates after adoptSide/adoptRight calls. */}
+          <Show when={localMergeResult()} keyed>
+            {(res) => {
+              const d = data();
+              if (!d) return null;
+              return renderMergeUI(
+                d.conflictContent,
+                res,
+                selectedConflictIdx,
+                resolvedConflicts,
+                isSaving,
+                smartMergeError,
+                smartMergeFeedback,
+                mergeText,
+                editing_,
+                props,
+                setSelectedConflictIdx,
+                setResolvedConflicts,
+                setLocalMergeResult,
+                setEditing,
+                setEditText,
+                setSaving,
+                adoptSide,
+                smartMerge,
+                startEditing,
+                finishEditing,
+                saveResolved,
+              );
+            }}
           </Show>
         </Show>
       </Show>
