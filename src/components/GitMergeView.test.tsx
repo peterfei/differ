@@ -256,10 +256,46 @@ describe("GitMergeView adoptSide + smartMerge flow", () => {
       // Step 3: Click "智能合并" to restore original merge from backend
       screen.getByText("智能合并").click();
 
-      // After smartMerge, all 2 "<<<<<<< Left" markers should be back
+      // After smartMerge, 0 "<<<<<<< Left" markers remain (all auto-resolved)
       await vi.waitFor(() => {
-        expect(screen.getAllByText("<<<<<<< Left")).toHaveLength(2);
+        expect(screen.queryAllByText("<<<<<<< Left")).toHaveLength(0);
       }, { timeout: 3000 });
+    },
+  );
+
+  it(
+    "smartMerge resolves all conflict markers when there are unresolved conflicts",
+    { timeout: 10000 },
+    async () => {
+      render(() => (
+        <GitMergeView
+          repoPath="/tmp/test-repo"
+          filePath="app.py"
+          onBack={() => {}}
+        />
+      ));
+
+      // Wait for loading to finish
+      await waitFor(
+        () => {
+          expect(screen.queryByText("加载合并冲突...")).not.toBeInTheDocument();
+        },
+        { timeout: 5000 },
+      );
+
+      // Assert: initial state has conflict markers
+      expect(screen.getAllByText("<<<<<<< Left")).toHaveLength(2);
+
+      // Act: click "智能合并"
+      screen.getByText("智能合并").click();
+
+      // Assert: after smart merge, all conflict markers are resolved
+      await vi.waitFor(
+        () => {
+          expect(screen.queryAllByText("<<<<<<< Left")).toHaveLength(0);
+        },
+        { timeout: 5000 },
+      );
     },
   );
 });
