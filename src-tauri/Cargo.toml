@@ -22,7 +22,7 @@ tauri-plugin-store = "2.4.3"
 notify = "8.2.0"
 
 # Git integration
-git2 = "0.19"
+git2 = { version = "0.19", features = ["vendored-openssl"] }
 
 # Error handling
 thiserror = "1"
