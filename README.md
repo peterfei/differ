@@ -6,6 +6,8 @@
 
 ![screenshot](screenshot.png)
 
+<video src="https://raw.githubusercontent.com/peterfei/differ/main/public/Differ.mov" width="800" controls autoplay loop muted></video>
+
 ## 功能特性
 
 - **并排对比** — 逐行对比两个文件，支持语法高亮、滚动同步和内联变更详情。
