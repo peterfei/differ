@@ -531,6 +531,58 @@ describe("GitMergeView consecutive_conflicts fixture", () => {
   );
 
   it(
+    "navigates to db.host conflict after resolving server.host and adopts left correctly",
+    { timeout: 10000 },
+    async () => {
+      render(() => (
+        <GitMergeView
+          repoPath="/tmp/test-repo"
+          filePath="config.txt"
+          onBack={() => {}}
+        />
+      ));
+
+      await waitFor(
+        () => {
+          expect(screen.queryByText("加载合并冲突...")).not.toBeInTheDocument();
+        },
+        { timeout: 5000 },
+      );
+
+      // Initial: 5 conflicts
+      expect(screen.getAllByText("<<<<<<< Left")).toHaveLength(5);
+
+      // Step 1: Resolve server.host (conflict #1 = idx 0)
+      screen.getByText("采用左侧").click();
+      await vi.waitFor(() => {
+        expect(screen.getAllByText("<<<<<<< Left")).toHaveLength(4);
+      }, { timeout: 3000 });
+
+      // Auto-advance went to idx=1 (db.name/db.user).
+      // Navigate back to idx=0 with "上一处" → now at db.host conflict
+      screen.getByText("上一处").click();
+
+      // Verify showing "冲突 #1" (idx=0 = db.host)
+      await vi.waitFor(() => {
+        expect(screen.getByText(/冲突 #1/)).toBeInTheDocument();
+      }, { timeout: 3000 });
+
+      // Step 2: Click "采用左侧" on db.host conflict
+      screen.getByText("采用左侧").click();
+
+      // After resolving db.host: 3 markers remain (db.name, cache, log)
+      await vi.waitFor(() => {
+        expect(screen.getAllByText("<<<<<<< Left")).toHaveLength(3);
+      }, { timeout: 3000 });
+
+      // Conflict badge must show "3 个冲突"
+      await vi.waitFor(() => {
+        expect(screen.getByText("3 个冲突")).toBeInTheDocument();
+      }, { timeout: 3000 });
+    },
+  );
+
+  it(
     "adoptLeft then adoptRight all the way to resolution with consecutive_conflicts fixture",
     { timeout: 15000 },
     async () => {
