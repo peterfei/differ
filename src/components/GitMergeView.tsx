@@ -1,4 +1,4 @@
-import { createSignal, Show, createResource, createRenderEffect } from "solid-js";
+import { createSignal, Show, createResource, createRenderEffect, createMemo } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import type { ConflictContent } from "../types/git";
 import type { MergeResult, MergeConflict } from "../types/merge";
@@ -25,8 +25,6 @@ export function GitMergeView(props: GitMergeViewProps) {
   const [smartMergeFeedback, setSmartMergeFeedback] = createSignal<string | null>(null);
 
   // ── Data loading via createResource ──
-  // SolidJS's official async data primitive: signal updates from the fetcher
-  // always trigger DOM re-renders correctly (unlike onMount + .then/finally).
 
   const [data] = createResource(
     () => `${props.repoPath}:${props.filePath}`,
@@ -55,9 +53,6 @@ export function GitMergeView(props: GitMergeViewProps) {
   });
 
   // ── Conflict resolution helpers ──
-  // These operate on localMergeResult signal (not the resource), so they
-  // work correctly for local-only modifications (adoptSide) and async
-  // re-merges (smartMerge).
 
   function adoptSide(side: "left" | "right") {
     const res = localMergeResult();
@@ -84,16 +79,12 @@ export function GitMergeView(props: GitMergeViewProps) {
     const newConflicts = parseConflictsFromText(newText);
 
     setLocalMergeResult({ ...res, merged_text: newText, conflicts: newConflicts });
-    // Clear resolved tracking — old indices are stale after re-parsing.
-    // The source of truth is the text: remaining conflicts are all unresolved.
     setResolvedConflicts(new Set<number>());
     setEditText(newText);
 
     if (idx < newConflicts.length - 1) {
       setSelectedConflictIdx(idx + 1);
     } else {
-      // Clamp to valid range — when resolving the last conflict in the old
-      // array, newConflicts.length = oldLength - 1, so idx may be OOB.
       setSelectedConflictIdx(Math.max(0, newConflicts.length - 1));
     }
   }
@@ -107,23 +98,17 @@ export function GitMergeView(props: GitMergeViewProps) {
     setEditing(false);
 
     try {
-      // Auto-resolve all conflicts by adopting "ours" (left) side
-      // Process in reverse order to preserve line numbers
       let text = res.merged_text;
       const sorted = [...res.conflicts].sort((a, b) => b.start_line - a.start_line);
 
       for (const conflict of sorted) {
         const lines = text.split("\n");
-        const startIdx = conflict.start_line - 1; // 0-based
-
-        // Find the >>>>>>> line
+        const startIdx = conflict.start_line - 1;
         let endIdx = startIdx;
         while (endIdx < lines.length && !lines[endIdx].startsWith(">>>>>>>")) {
           endIdx++;
         }
-        if (endIdx < lines.length) endIdx++; // include the >>>>>>> line
-
-        // Rebuild: before + left_content + after
+        if (endIdx < lines.length) endIdx++;
         const before = lines.slice(0, startIdx);
         const after = lines.slice(endIdx);
         text = [...before, ...conflict.left_content, ...after].join("\n");
@@ -179,20 +164,47 @@ export function GitMergeView(props: GitMergeViewProps) {
     }
   }
 
-  // ── Render ──
+  // ── Render via createMemo ──
   //
-  // CRITICAL: Do NOT use `if (data.loading) return ...` at the component
-  // function top level — SolidJS's compiler does NOT properly track the
-  // `resource.loading` getter in component-level if-statements. Always use
-  // <Show> or JSX ternary expressions for resource property checks.
+  // We use a single createMemo to compute the entire merge UI JSX.
+  // This guarantees ALL signal reads (selectedConflictIdx, resolvedConflicts,
+  // localMergeResult, etc.) are tracked within SolidJS's reactive scope.
+  // Unlike <Show keyed>, which gates re-execution on the `when` reference
+  // changing, createMemo re-executes whenever ANY dependency signal changes.
   //
-  // Also, do NOT cache signal values in local variables like `const d = data()`
-  // at the component top level — those won't update when signals change.
-  // Always access signals directly inside JSX template expressions.
+  // The memo returns null when loading/error, so the outer <Show> fallbacks
+  // handle those states. When the memo produces JSX, it's rendered directly.
 
-  const isSaving = saving;
-  const mergeText = editText;
-  const editing_ = editing;
+  const mergeUI = createMemo(() => {
+    const res = localMergeResult();
+    if (!res) return null;
+    const d = data();
+    if (!d) return null;
+
+    return renderMergeUI(
+      d.conflictContent,
+      res,
+      selectedConflictIdx,
+      resolvedConflicts,
+      saving,
+      smartMergeError,
+      smartMergeFeedback,
+      editText,
+      editing,
+      props,
+      setSelectedConflictIdx,
+      setResolvedConflicts,
+      setLocalMergeResult,
+      setEditing,
+      setEditText,
+      setSaving,
+      adoptSide,
+      smartMerge,
+      startEditing,
+      finishEditing,
+      saveResolved,
+    );
+  });
 
   return (
     <div class="flex-1 flex flex-col overflow-hidden bg-slate-950">
@@ -239,40 +251,8 @@ export function GitMergeView(props: GitMergeViewProps) {
             </div>
           }
         >
-          {/* Merge UI — rendered only when data and localMergeResult are ready */}
-          {/* CRITICAL: keyed is required! Without it, <Show> uses truthiness */}
-          {/* equality (!!a === !!b), so when localMergeResult changes from one */}
-          {/* truthy MergeResult to another, children don't re-render and the */}
-          {/* merge text never updates after adoptSide/adoptRight calls. */}
-          <Show when={localMergeResult()} keyed>
-            {(res) => {
-              const d = data();
-              if (!d) return null;
-              return renderMergeUI(
-                d.conflictContent,
-                res,
-                selectedConflictIdx,
-                resolvedConflicts,
-                isSaving,
-                smartMergeError,
-                smartMergeFeedback,
-                mergeText,
-                editing_,
-                props,
-                setSelectedConflictIdx,
-                setResolvedConflicts,
-                setLocalMergeResult,
-                setEditing,
-                setEditText,
-                setSaving,
-                adoptSide,
-                smartMerge,
-                startEditing,
-                finishEditing,
-                saveResolved,
-              );
-            }}
-          </Show>
+          {/* Merge UI — computed via createMemo for proper signal tracking */}
+          {mergeUI()}
         </Show>
       </Show>
     </div>

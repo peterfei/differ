@@ -4,39 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Differ — Diff / Merge GUI</title>
-  <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          fontFamily: {
-            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
-            mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
-          },
-          colors: {
-            diff: {
-              add: { bg: '#0a2e1a', border: '#22c55e', text: '#bbf7d0' },
-              del: { bg: '#3b0f12', border: '#ef4444', text: '#fecaca' },
-              neutral: { bg: '#1e293b', border: '#475569', text: '#cbd5e1' },
-              wordAdd: '#166534',
-              wordDel: '#991b1b',
-            },
-          },
-          animation: {
-            'fade-in': 'fadeIn 0.2s ease-out',
-            'slide-up': 'slideUp 0.25s ease-out',
-            'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-          },
-          keyframes: {
-            fadeIn: { '0%': { opacity: '0' }, '100%': { opacity: '1' } },
-            slideUp: { '0%': { opacity: '0', transform: 'translateY(8px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },
-          },
-        },
-      },
-    };
-  </script>
   <style>
     * { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
     body { font-family: 'Inter', system-ui, -apple-system, sans-serif; }

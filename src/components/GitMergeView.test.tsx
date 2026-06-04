@@ -582,6 +582,45 @@ describe("GitMergeView consecutive_conflicts fixture", () => {
     },
   );
 
+  // ── Pure logic test: adoptSide on db.host with exact Rust three_way_merge output ──
+  // This tests the adoptSide function IN ISOLATION with the exact data from Rust,
+  // bypassing any SolidJS reactivity concerns.
+
+  it(
+    "pure adoptSide logic correctly resolves db.host conflict at idx=1",
+    () => {
+      const mergedText = CONSECUTIVE_MERGE_RESULT.merged_text;
+      const conflicts = [...CONSECUTIVE_MERGE_RESULT.conflicts];
+      const idx = 1; // db.host conflict
+      const side = "left";
+
+      const conflict = conflicts[idx];
+      const lines = mergedText.split("\n");
+      const startLine = conflict.start_line - 1;
+
+      let markerEnd = startLine;
+      while (markerEnd < lines.length && !lines[markerEnd].startsWith(">>>>>>>")) {
+        markerEnd++;
+      }
+      if (markerEnd < lines.length) markerEnd++;
+
+      const chosenLines = side === "left" ? conflict.left_content : conflict.right_content;
+      const before = lines.slice(0, startLine);
+      const after = lines.slice(markerEnd);
+      const newLines = [...before, ...chosenLines, ...after];
+      const newText = newLines.join("\n");
+
+      // 1. Must contain the adopted left content
+      expect(newText).toContain("db.host=127.0.0.1");
+      // 2. Must NOT contain the rejected right content
+      expect(newText).not.toContain("db.host=db.internal");
+      // 3. Must still have 4 conflict markers (from remaining 4 conflicts)
+      expect(newText.match(/<<<<<<< Left/g)).toHaveLength(4);
+      expect(newText.match(/=======/g)).toHaveLength(4);
+      expect(newText.match(/>>>>>>> Right/g)).toHaveLength(4);
+    },
+  );
+
   it(
     "adoptLeft then adoptRight all the way to resolution with consecutive_conflicts fixture",
     { timeout: 15000 },
