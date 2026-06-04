@@ -552,8 +552,8 @@ function renderMergeText(
       else if (line.startsWith("=======")) textClass = "text-amber-400 font-medium";
       else textClass = "text-orange-400 font-medium";
     } else if (conflictStart > 0 && lineNum >= conflictStart && lineNum <= conflictEnd) {
-      bgClass = resolvedConflicts.has(currentIdx) ? "bg-emerald-950/20" : "bg-amber-950/30";
-      if (lineNum === conflictStart) bgClass = resolvedConflicts.has(currentIdx) ? "bg-emerald-950/30" : "bg-amber-950/60";
+      bgClass = resolvedConflicts.has(currentIdx) ? "bg-emerald-950/20" : "bg-amber-900/35";
+      if (lineNum === conflictStart) bgClass = resolvedConflicts.has(currentIdx) ? "bg-emerald-950/30" : "bg-amber-800/30";
     }
 
     return (
