@@ -167,6 +167,7 @@ export function MergeView() {
     const newRes = adoptSide(res, curr, idx, 'left');
     pushUndo(res);
     setResult(newRes.result);
+    setViewMode('merged');
     setSelectedConflictIndex(Math.min(idx, newRes.conflictCount > 0 ? idx : Math.max(0, newRes.conflictCount - 1)));
   }
 
@@ -179,6 +180,7 @@ export function MergeView() {
     const newRes = adoptSide(res, curr, idx, 'right');
     pushUndo(res);
     setResult(newRes.result);
+    setViewMode('merged');
     setSelectedConflictIndex(Math.min(idx, newRes.conflictCount > 0 ? idx : Math.max(0, newRes.conflictCount - 1)));
   }
 
