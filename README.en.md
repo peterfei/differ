@@ -8,7 +8,7 @@
 
 
 <p align="center">
-  <video src="https://raw.githubusercontent.com/peterfei/differ/main/public/Differ.mp4" width="800" controls autoplay loop muted>
+  <video src="https://github.com/peterfei/differ/releases/download/v0.2.0/Differ.mp4" width="800" controls autoplay loop muted>
     Your browser does not support HTML5 video.
   </video>
 </p>
